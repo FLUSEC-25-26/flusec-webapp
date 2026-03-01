@@ -90,7 +90,7 @@ export default function LeaderDashboardPage() {
                     <Users className="w-5 h-5 text-brand-400" />
                     Team Overview
                 </h1>
-                <p className="section-subtitle">{currentTeam.name} — Security Intelligence Dashboard</p>
+                <p className="section-subtitle">{currentTeam.name} - Security Intelligence Dashboard</p>
             </div>
 
             {/* Team-wide stat cards */}
