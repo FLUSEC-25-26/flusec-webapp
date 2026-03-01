@@ -106,7 +106,7 @@ export default function TeamOverviewPage() {
                 <div>
                     <h1 className="text-2xl font-bold text-white">Team Hub</h1>
                     <p className="text-sm text-gray-400 mt-1">
-                        Manage your security teams — create new ones or join existing ones.
+                        Manage your security teams - create new ones or join existing ones.
                     </p>
                 </div>
                 <button onClick={loadTeams} className="btn-secondary" title="Refresh">
@@ -295,8 +295,8 @@ function TeamCard({ team, onClick }: { team: MyTeam; onClick: () => void }) {
                     <div className="flex items-center gap-2">
                         <p className="font-semibold text-white">{team.name}</p>
                         <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${team.myRole === 'leader'
-                                ? 'bg-yellow-500/10 text-yellow-400 border border-yellow-500/20'
-                                : 'bg-brand-500/10 text-brand-400 border border-brand-500/20'
+                            ? 'bg-yellow-500/10 text-yellow-400 border border-yellow-500/20'
+                            : 'bg-brand-500/10 text-brand-400 border border-brand-500/20'
                             }`}>
                             {team.myRole === 'leader' ? '👑 Leader' : 'Member'}
                         </span>
