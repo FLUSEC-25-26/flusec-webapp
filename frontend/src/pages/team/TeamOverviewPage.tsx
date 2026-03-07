@@ -4,7 +4,7 @@ import { supabase } from '@/lib/supabase'
 import { createTeam, joinTeam } from '@/lib/api'
 import {
     ShieldCheck, Users, Plus, Hash, Loader2, AlertCircle,
-    Crown, User, ArrowRight, Copy, CheckCheck, RefreshCw
+    Crown, User, ArrowRight, Copy, CheckCheck, RefreshCw, Trash2
 } from 'lucide-react'
 
 interface MyTeam {
@@ -24,6 +24,12 @@ export default function TeamOverviewPage() {
     const [teams, setTeams] = useState<MyTeam[]>([])
     const [loadingTeams, setLoadingTeams] = useState(true)
     const [panel, setPanel] = useState<PanelMode>(null)
+
+    // Delete state
+    const [deletingId, setDeletingId] = useState<string | null>(null)
+    const [confirmTeam, setConfirmTeam] = useState<MyTeam | null>(null)
+    const [deleteLoading, setDeleteLoading] = useState(false)
+    const [deleteErr, setDeleteErr] = useState('')
 
     // Create-team form state
     const [newName, setNewName] = useState('')
@@ -90,6 +96,31 @@ export default function TeamOverviewPage() {
         }
     }
 
+    async function handleDeleteConfirm() {
+        if (!confirmTeam) return
+        setDeleteLoading(true)
+        setDeleteErr('')
+        try {
+            const { data: { session } } = await supabase.auth.getSession()
+            const res = await fetch(`/api/teams/${confirmTeam.id}`, {
+                method: 'DELETE',
+                headers: { Authorization: `Bearer ${session?.access_token}` }
+            })
+            if (!res.ok) {
+                const json = await res.json() as { error: string }
+                setDeleteErr(json.error ?? 'Failed to delete team')
+                return
+            }
+            setConfirmTeam(null)
+            await loadTeams()
+        } catch {
+            setDeleteErr('Network error. Please try again.')
+        } finally {
+            setDeleteLoading(false)
+            setDeletingId(null)
+        }
+    }
+
     function handleCopy() {
         navigator.clipboard.writeText(createdCode)
         setCopied(true)
@@ -101,12 +132,56 @@ export default function TeamOverviewPage() {
 
     return (
         <div className="max-w-4xl mx-auto space-y-8 animate-slide-up">
+
+            {/* ── Delete confirmation modal ── */}
+            {confirmTeam && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+                    <div className="bg-surface-secondary border border-red-500/30 rounded-2xl p-6 w-full max-w-sm shadow-2xl space-y-4 animate-slide-up">
+                        <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 rounded-xl bg-red-500/15 flex items-center justify-center flex-shrink-0">
+                                <Trash2 className="w-5 h-5 text-red-400" />
+                            </div>
+                            <div>
+                                <h3 className="font-bold text-white">Delete Team</h3>
+                                <p className="text-xs text-gray-400">This action cannot be undone</p>
+                            </div>
+                        </div>
+                        <p className="text-sm text-gray-300">
+                            Are you sure you want to delete <span className="font-semibold text-white">"{confirmTeam.name}"</span>?
+                            All members, findings, and scan sessions will be permanently removed.
+                        </p>
+                        {deleteErr && (
+                            <div className="flex items-center gap-2 text-red-400 text-sm bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2">
+                                <AlertCircle className="w-4 h-4 flex-shrink-0" />{deleteErr}
+                            </div>
+                        )}
+                        <div className="flex gap-3">
+                            <button
+                                onClick={() => { setConfirmTeam(null); setDeleteErr('') }}
+                                className="btn-secondary flex-1 justify-center"
+                                disabled={deleteLoading}
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={handleDeleteConfirm}
+                                disabled={deleteLoading}
+                                className="flex-1 flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold bg-red-500/15 text-red-400 border border-red-500/30 hover:bg-red-500/25 transition-all disabled:opacity-50"
+                            >
+                                {deleteLoading && <Loader2 className="w-4 h-4 animate-spin" />}
+                                {deleteLoading ? 'Deleting…' : 'Delete Team'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             {/* Header */}
             <div className="flex items-center justify-between">
                 <div>
                     <h1 className="text-2xl font-bold text-white">Team Hub</h1>
                     <p className="text-sm text-gray-400 mt-1">
-                        Manage your security teams - create new ones or join existing ones.
+                        Manage your security teams — create new ones or join existing ones.
                     </p>
                 </div>
                 <button onClick={loadTeams} className="btn-secondary" title="Refresh">
@@ -251,7 +326,6 @@ export default function TeamOverviewPage() {
                 </div>
             ) : (
                 <div className="space-y-6">
-                    {/* Teams I lead */}
                     {myLeaderTeams.length > 0 && (
                         <div>
                             <h2 className="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-3 flex items-center gap-2">
@@ -259,13 +333,18 @@ export default function TeamOverviewPage() {
                             </h2>
                             <div className="space-y-3">
                                 {myLeaderTeams.map(team => (
-                                    <TeamCard key={team.id} team={team} onClick={() => navigate(`/team/${team.id}`)} />
+                                    <TeamCard
+                                        key={team.id}
+                                        team={team}
+                                        deleting={deletingId === team.id}
+                                        onClick={() => navigate(`/team/${team.id}`)}
+                                        onDelete={() => { setConfirmTeam(team); setDeletingId(team.id) }}
+                                    />
                                 ))}
                             </div>
                         </div>
                     )}
 
-                    {/* Teams I joined */}
                     {myMemberTeams.length > 0 && (
                         <div>
                             <h2 className="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-3 flex items-center gap-2">
@@ -273,7 +352,12 @@ export default function TeamOverviewPage() {
                             </h2>
                             <div className="space-y-3">
                                 {myMemberTeams.map(team => (
-                                    <TeamCard key={team.id} team={team} onClick={() => navigate(`/team/${team.id}`)} />
+                                    <TeamCard
+                                        key={team.id}
+                                        team={team}
+                                        deleting={false}
+                                        onClick={() => navigate(`/team/${team.id}`)}
+                                    />
                                 ))}
                             </div>
                         </div>
@@ -284,27 +368,50 @@ export default function TeamOverviewPage() {
     )
 }
 
-function TeamCard({ team, onClick }: { team: MyTeam; onClick: () => void }) {
+function TeamCard({
+    team, onClick, onDelete, deleting
+}: {
+    team: MyTeam
+    onClick: () => void
+    onDelete?: () => void
+    deleting: boolean
+}) {
     return (
-        <button onClick={onClick} className="card w-full flex items-center justify-between hover:border-brand-500/30 transition-all group text-left">
-            <div className="flex items-center gap-4">
+        <div className="card flex items-center justify-between hover:border-brand-500/30 transition-all group">
+            <button onClick={onClick} className="flex items-center gap-4 flex-1 text-left min-w-0">
                 <div className="w-10 h-10 rounded-xl bg-gradient-brand flex items-center justify-center flex-shrink-0 shadow-glow-brand/50">
                     <ShieldCheck className="w-5 h-5 text-white" />
                 </div>
-                <div>
+                <div className="min-w-0">
                     <div className="flex items-center gap-2">
-                        <p className="font-semibold text-white">{team.name}</p>
-                        <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${team.myRole === 'leader'
+                        <p className="font-semibold text-white truncate">{team.name}</p>
+                        <span className={`text-xs px-2 py-0.5 rounded-full font-medium flex-shrink-0 ${team.myRole === 'leader'
                             ? 'bg-yellow-500/10 text-yellow-400 border border-yellow-500/20'
                             : 'bg-brand-500/10 text-brand-400 border border-brand-500/20'
                             }`}>
                             {team.myRole === 'leader' ? '👑 Leader' : 'Member'}
                         </span>
                     </div>
-                    {team.description && <p className="text-xs text-gray-400 mt-0.5">{team.description}</p>}
+                    {team.description && <p className="text-xs text-gray-400 mt-0.5 truncate">{team.description}</p>}
                 </div>
+            </button>
+
+            <div className="flex items-center gap-2 flex-shrink-0 ml-3">
+                {/* Delete button — leaders only */}
+                {onDelete && (
+                    <button
+                        onClick={e => { e.stopPropagation(); onDelete() }}
+                        disabled={deleting}
+                        title="Delete team"
+                        className="p-2 rounded-lg text-gray-600 hover:text-red-400 hover:bg-red-500/10 transition-all opacity-0 group-hover:opacity-100"
+                    >
+                        <Trash2 className="w-4 h-4" />
+                    </button>
+                )}
+                <button onClick={onClick} className="p-1">
+                    <ArrowRight className="w-4 h-4 text-gray-600 group-hover:text-brand-400 transition-colors" />
+                </button>
             </div>
-            <ArrowRight className="w-4 h-4 text-gray-600 group-hover:text-brand-400 transition-colors flex-shrink-0" />
-        </button>
+        </div>
     )
 }

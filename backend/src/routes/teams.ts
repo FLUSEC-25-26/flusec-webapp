@@ -101,6 +101,38 @@ router.get('/:teamId', authMiddleware, async (req: AuthRequest, res) => {
     res.json({ data: team })
 })
 
+// DELETE /api/teams/:teamId — Delete team (leader only)
+router.delete('/:teamId', authMiddleware, async (req: AuthRequest, res) => {
+    const teamId = req.params.teamId as string
+
+    // Only the leader can delete
+    const { data: team } = await supabaseAdmin
+        .from('teams')
+        .select('leader_id')
+        .eq('id', teamId)
+        .single()
+
+    if (!team) { res.status(404).json({ error: 'Team not found' }); return }
+    if (team.leader_id !== req.userId) {
+        res.status(403).json({ error: 'Only the team leader can delete this team' }); return
+    }
+
+    // Manually delete child rows that don't have ON DELETE CASCADE on team_id
+    // Order matters: fix_tasks → findings → scan_sessions → team_members → teams
+    await supabaseAdmin.from('fix_tasks').delete().eq('team_id', teamId)
+    await supabaseAdmin.from('findings').delete().eq('team_id', teamId)
+    await supabaseAdmin.from('scan_sessions').delete().eq('team_id', teamId)
+    await supabaseAdmin.from('team_members').delete().eq('team_id', teamId)
+
+    // Now safe to delete the team
+    const { error } = await supabaseAdmin.from('teams').delete().eq('id', teamId)
+    if (error) { res.status(500).json({ error: error.message }); return }
+
+    res.json({ data: { message: 'Team deleted successfully' } })
+})
+
+
+
 // GET /api/teams/:teamId/members — List members with stats
 router.get('/:teamId/members', authMiddleware, async (req: AuthRequest, res) => {
     const { teamId } = req.params
