@@ -1,8 +1,9 @@
 import { Outlet, NavLink, useNavigate } from 'react-router-dom'
 import { useAuthStore } from '@/stores/authStore'
 import {
-    ShieldCheck, LayoutDashboard, Users, LogOut, ChevronRight, Bell
+    ShieldCheck, LayoutDashboard, Users, LogOut, ChevronRight
 } from 'lucide-react'
+import NotificationBell from '@/components/notifications/NotificationBell'
 
 const navItems = [
     { to: '/dashboard', label: 'My Dashboard', icon: LayoutDashboard },
@@ -81,10 +82,7 @@ export default function AppLayout() {
             <div className="flex-1 flex flex-col min-w-0">
                 {/* Topbar */}
                 <header className="h-14 border-b border-surface-border bg-surface-secondary/50 backdrop-blur flex items-center justify-end px-6 gap-3">
-                    <button className="btn-ghost p-2 relative">
-                        <Bell className="w-4 h-4" />
-                        <span className="absolute top-1.5 right-1.5 w-1.5 h-1.5 rounded-full bg-brand-400"></span>
-                    </button>
+                    <NotificationBell />
                 </header>
 
                 {/* Page content */}
