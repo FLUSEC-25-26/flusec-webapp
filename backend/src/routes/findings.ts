@@ -2,6 +2,7 @@ import { Router } from 'express'
 import { supabaseAdmin } from '../services/supabaseAdmin'
 import { authMiddleware, type AuthRequest } from '../middleware/authMiddleware'
 import type { RawFinding } from '../types'
+import { createNotification } from './notifications'
 
 const router = Router()
 
@@ -79,6 +80,37 @@ router.post('/upload', authMiddleware, async (req: AuthRequest, res) => {
     res.status(201).json({
         data: { session_id: session.id, findings_count: findings.length }
     })
+
+    // ── Fire notifications (non-blocking, after response) ──────
+    // Get uploader's name and team leader
+    const [profileRes, teamRes] = await Promise.all([
+        supabaseAdmin.from('profiles').select('full_name').eq('id', req.userId!).single(),
+        supabaseAdmin.from('teams').select('leader_id, name').eq('id', team_id).single(),
+    ])
+    const uploaderName = profileRes.data?.full_name ?? 'A team member'
+    const team = teamRes.data
+
+    if (team && team.leader_id !== req.userId) {
+        // Notify leader: new findings synced
+        await createNotification({
+            userId: team.leader_id,
+            teamId: team_id,
+            type: 'findings_synced',
+            title: 'New findings synced',
+            message: `${uploaderName} synced ${findings.length} finding${findings.length !== 1 ? 's' : ''} in ${team.name}.`,
+        })
+
+        // Extra alert if any are critical
+        if (counts.critical > 0) {
+            await createNotification({
+                userId: team.leader_id,
+                teamId: team_id,
+                type: 'critical_finding',
+                title: '🚨 Critical findings detected',
+                message: `${uploaderName} uploaded ${counts.critical} critical finding${counts.critical !== 1 ? 's' : ''} in ${team.name}. Immediate review recommended.`,
+            })
+        }
+    }
 })
 
 // GET /api/findings/me — own findings

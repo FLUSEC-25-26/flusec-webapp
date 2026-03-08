@@ -5,6 +5,7 @@ import authRoutes from './routes/auth'
 import teamsRoutes from './routes/teams'
 import findingsRoutes from './routes/findings'
 import membersRoutes from './routes/members'
+import notificationsRoutes from './routes/notifications'
 
 const app = express()
 const PORT = process.env.PORT ?? 3001
@@ -21,6 +22,7 @@ app.use('/api/auth', authRoutes)
 app.use('/api/teams', teamsRoutes)
 app.use('/api/findings', findingsRoutes)
 app.use('/api/members', membersRoutes)
+app.use('/api/notifications', notificationsRoutes)
 
 // ─── Global error handler ─────────────────────────────────────
 app.use((err: Error, _req: express.Request, res: express.Response, _next: express.NextFunction) => {

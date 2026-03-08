@@ -1,6 +1,7 @@
 import { Router } from 'express'
 import { supabaseAdmin } from '../services/supabaseAdmin'
 import { authMiddleware, type AuthRequest } from '../middleware/authMiddleware'
+import { createNotification } from './notifications'
 
 const router = Router()
 
@@ -68,6 +69,21 @@ router.post('/join', authMiddleware, async (req: AuthRequest, res) => {
     await supabaseAdmin.from('team_members').insert({
         team_id: team.id, user_id: req.userId!, role: 'member'
     })
+
+    // Notify team leader that a new member joined
+    const { data: joinerProfile } = await supabaseAdmin
+        .from('profiles').select('full_name').eq('id', req.userId!).single()
+    const { data: teamFull } = await supabaseAdmin
+        .from('teams').select('leader_id').eq('id', team.id).single()
+    if (teamFull && teamFull.leader_id !== req.userId) {
+        await createNotification({
+            userId: teamFull.leader_id,
+            teamId: team.id,
+            type: 'member_joined',
+            title: 'New member joined',
+            message: `${joinerProfile?.full_name ?? 'Someone'} joined your team "${team.name}".`,
+        })
+    }
 
     res.json({ data: { team_id: team.id, team_name: team.name } })
 })
@@ -211,6 +227,18 @@ router.delete('/:teamId/members/:userId', authMiddleware, async (req: AuthReques
 
     await supabaseAdmin.from('team_members').delete()
         .eq('team_id', teamId).eq('user_id', userId)
+
+    // Notify the removed member
+    const { data: teamInfo } = await supabaseAdmin
+        .from('teams').select('name').eq('id', teamId).single()
+    await createNotification({
+        userId,
+        teamId,
+        type: 'member_removed',
+        title: 'Removed from team',
+        message: `You have been removed from team "${teamInfo?.name ?? 'Unknown'}".`,
+    })
+
     res.json({ data: { message: 'Member removed' } })
 })
 
