@@ -101,6 +101,30 @@ router.get('/:teamId', authMiddleware, async (req: AuthRequest, res) => {
     res.json({ data: team })
 })
 
+// PUT /api/teams/:teamId — Update team name/description (leader only)
+router.put('/:teamId', authMiddleware, async (req: AuthRequest, res) => {
+    const teamId = req.params.teamId as string
+    const { name, description } = req.body as { name?: string; description?: string }
+
+    const isLeader = await isTeamLeader(teamId, req.userId!)
+    if (!isLeader) { res.status(403).json({ error: 'Only the team leader can edit team info' }); return }
+
+    const updates: Record<string, string | null> = {}
+    if (name) updates.name = name
+    if (description !== undefined) updates.description = description ?? null
+
+    const { data, error } = await supabaseAdmin
+        .from('teams')
+        .update(updates)
+        .eq('id', teamId)
+        .select()
+        .single()
+
+    if (error) { res.status(500).json({ error: error.message }); return }
+    res.json({ data })
+})
+
+
 // DELETE /api/teams/:teamId — Delete team (leader only)
 router.delete('/:teamId', authMiddleware, async (req: AuthRequest, res) => {
     const teamId = req.params.teamId as string
