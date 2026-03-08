@@ -47,7 +47,7 @@ export default function LoginPage() {
                     </h2>
                     <p className="text-gray-400 text-base leading-relaxed max-w-sm">
                         Aggregate Flutter vulnerability findings across your entire team.
-                        Detect, track, and fix security issues together — in real time.
+                        Detect, track, and fix security issues in real time.
                     </p>
                     <div className="mt-10 grid grid-cols-2 gap-4">
                         {[
