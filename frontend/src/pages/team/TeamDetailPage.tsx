@@ -47,8 +47,15 @@ export default function TeamDetailPage() {
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState('')
     const [copied, setCopied] = useState(false)
+    const [copiedId, setCopiedId] = useState(false)
 
     const isLeader = team ? (user?.id === team.leader_id) : false
+
+    function copyTeamId() {
+        navigator.clipboard.writeText(team?.id ?? '')
+        setCopiedId(true)
+        setTimeout(() => setCopiedId(false), 2000)
+    }
 
     useEffect(() => {
         if (!teamId) return
@@ -151,17 +158,17 @@ export default function TeamDetailPage() {
                         <ShieldCheck className="w-6 h-6 text-white" />
                     </div>
                     <div>
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2 flex-wrap">
                             <h1 className="text-2xl font-bold text-white">{team.name}</h1>
                             <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${isLeader
-                                    ? 'bg-yellow-500/10 text-yellow-400 border border-yellow-500/20'
-                                    : 'bg-brand-500/10 text-brand-400 border border-brand-500/20'
+                                ? 'bg-yellow-500/10 text-yellow-400 border border-yellow-500/20'
+                                : 'bg-brand-500/10 text-brand-400 border border-brand-500/20'
                                 }`}>
                                 {isLeader ? '👑 Leader' : 'Member'}
                             </span>
                         </div>
                         {team.description && (
-                            <p className="text-sm text-gray-400 mt-0.5">{team.description}</p>
+                            <p className="text-sm text-gray-400 mt-1">{team.description}</p>
                         )}
                         <p className="text-xs text-gray-600 mt-1">
                             Created {new Date(team.created_at).toLocaleDateString()}
@@ -170,11 +177,27 @@ export default function TeamDetailPage() {
                     </div>
                 </div>
 
-                {isLeader && (
-                    <Link to={`/team/${teamId}/settings`} className="btn-secondary flex-shrink-0">
-                        <Settings className="w-4 h-4" /> Settings
-                    </Link>
-                )}
+                {/* Right side — Team ID + Settings */}
+                <div className="flex items-center gap-3 flex-wrap">
+                    <button
+                        onClick={copyTeamId}
+                        title="Click to copy Team ID"
+                        className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-brand-500/10 border border-brand-500/20 hover:bg-brand-500/20 hover:border-brand-500/40 transition-all group"
+                    >
+                        <span className="text-xs text-brand-400 font-bold uppercase tracking-widest">Team ID</span>
+                        <span className="text-sm font-mono text-gray-200 group-hover:text-white transition-colors">
+                            {team.id}
+                        </span>
+                        {copiedId
+                            ? <CheckCheck className="w-4 h-4 text-green-400 flex-shrink-0" />
+                            : <Copy className="w-4 h-4 text-brand-500 group-hover:text-brand-300 flex-shrink-0 transition-colors" />}
+                    </button>
+                    {isLeader && (
+                        <Link to={`/team/${teamId}/settings`} className="btn-secondary flex-shrink-0">
+                            <Settings className="w-4 h-4" /> Settings
+                        </Link>
+                    )}
+                </div>
             </div>
 
             {/* ── Invite code (leader only) ── */}
