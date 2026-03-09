@@ -61,16 +61,22 @@ export default function AppLayout() {
                     ))}
                 </nav>
 
-                {/* User */}
+                {/* User — click to go to profile */}
                 <div className="p-4 border-t border-surface-border">
                     <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-full bg-gradient-brand flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
-                            {user?.full_name?.[0]?.toUpperCase() ?? '?'}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                            <p className="text-sm font-semibold text-white truncate">{user?.full_name ?? 'User'}</p>
-                            <p className="text-[10px] text-gray-500 truncate">Member</p>
-                        </div>
+                        <button
+                            onClick={() => navigate('/profile')}
+                            className="flex items-center gap-3 flex-1 min-w-0 group text-left"
+                            title="View profile"
+                        >
+                            <div className="w-8 h-8 rounded-full bg-gradient-brand flex items-center justify-center text-white text-xs font-bold flex-shrink-0 group-hover:shadow-glow-brand transition-shadow">
+                                {user?.full_name?.[0]?.toUpperCase() ?? '?'}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                                <p className="text-sm font-semibold text-white truncate group-hover:text-brand-300 transition-colors">{user?.full_name ?? 'User'}</p>
+                                <p className="text-[10px] text-gray-500 truncate">View profile</p>
+                            </div>
+                        </button>
                         <button onClick={handleSignOut} className="btn-ghost p-1.5 text-gray-500 hover:text-red-400" title="Sign out">
                             <LogOut className="w-4 h-4" />
                         </button>

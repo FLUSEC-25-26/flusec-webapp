@@ -7,6 +7,7 @@ import MemberDashboardPage from '@/pages/dashboard/MemberDashboardPage'
 import TeamOverviewPage from '@/pages/team/TeamOverviewPage'
 import TeamDetailPage from '@/pages/team/TeamDetailPage'
 import TeamSettingsPage from '@/pages/settings/TeamSettingsPage'
+import ProfilePage from '@/pages/settings/ProfilePage'
 import AppLayout from '@/components/layout/AppLayout'
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -52,6 +53,7 @@ export default function App() {
                     <Route path="/team/:teamId" element={<TeamDetailPage />} />
                     <Route path="/team/:teamId/settings" element={<TeamSettingsPage />} />
                     <Route path="/team/:teamId/member/:userId" element={<MemberDashboardPage isLeaderView />} />
+                    <Route path="/profile" element={<ProfilePage />} />
                 </Route>
 
                 {/* Default */}
