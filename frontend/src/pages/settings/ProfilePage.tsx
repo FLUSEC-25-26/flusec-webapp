@@ -4,7 +4,7 @@ import { supabase } from '@/lib/supabase'
 import { useAuthStore } from '@/stores/authStore'
 import {
     User, Mail, Lock, Save, CheckCheck, AlertCircle,
-    Loader2, ShieldCheck, Calendar, Activity, ArrowLeft
+    Loader2, ShieldCheck, Calendar, Activity, ArrowLeft, Trash2
 } from 'lucide-react'
 
 export default function ProfilePage() {
@@ -23,6 +23,11 @@ export default function ProfilePage() {
     const [passSaving, setPassSaving] = useState(false)
     const [passSaved, setPassSaved] = useState(false)
     const [passError, setPassError] = useState('')
+
+    // ── Delete account ────────────────────────────────────────
+    const [deleteConfirm, setDeleteConfirm] = useState('')
+    const [deleteLoading, setDeleteLoading] = useState(false)
+    const [deleteError, setDeleteError] = useState('')
 
     // ── Personal stats ────────────────────────────────────────
     const [stats, setStats] = useState<{
@@ -103,6 +108,26 @@ export default function ProfilePage() {
             setPassSaved(true)
             setNewPassword(''); setConfirmPass('')
             setTimeout(() => setPassSaved(false), 3000)
+        }
+    }
+
+    // ── Delete account ────────────────────────────────────────
+    async function deleteAccount() {
+        if (deleteConfirm !== 'DELETE') return
+        setDeleteLoading(true); setDeleteError('')
+        const { data: { session } } = await supabase.auth.getSession()
+        if (!session) return
+        const res = await fetch('/api/auth/account', {
+            method: 'DELETE',
+            headers: { Authorization: `Bearer ${session.access_token}` },
+        })
+        setDeleteLoading(false)
+        if (res.ok) {
+            await supabase.auth.signOut()
+            navigate('/login')
+        } else {
+            const json = await res.json() as { error: string }
+            setDeleteError(json.error ?? 'Failed to delete account')
         }
     }
 
@@ -257,6 +282,46 @@ export default function ProfilePage() {
                         {passSaving ? 'Updating…' : passSaved ? 'Password Updated!' : 'Update Password'}
                     </button>
                 </form>
+            </div>
+
+            {/* ── Danger Zone ── */}
+            <div className="card border border-red-500/20 bg-red-500/5 space-y-4">
+                <div className="flex items-center gap-2">
+                    <Trash2 className="w-4 h-4 text-red-400" />
+                    <h3 className="text-sm font-semibold text-red-400">Danger Zone</h3>
+                </div>
+                <p className="text-xs text-gray-400 leading-relaxed">
+                    Permanently delete your account and all associated data — teams you lead,
+                    findings, scan sessions, and notifications. <strong className="text-white">This action cannot be undone.</strong>
+                </p>
+                <div className="space-y-3">
+                    <div>
+                        <label className="label text-red-400/80">Type <span className="font-mono font-bold text-red-300">DELETE</span> to confirm</label>
+                        <input
+                            type="text"
+                            value={deleteConfirm}
+                            onChange={e => setDeleteConfirm(e.target.value)}
+                            placeholder="DELETE"
+                            className="input border-red-500/30 focus:border-red-500/60"
+                        />
+                    </div>
+                    {deleteError && (
+                        <p className="text-xs text-red-400 flex items-center gap-1.5">
+                            <AlertCircle className="w-3.5 h-3.5" />{deleteError}
+                        </p>
+                    )}
+                    <button
+                        onClick={deleteAccount}
+                        disabled={deleteConfirm !== 'DELETE' || deleteLoading}
+                        className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-all
+                            bg-red-600 hover:bg-red-500 text-white disabled:opacity-40 disabled:cursor-not-allowed"
+                    >
+                        {deleteLoading
+                            ? <Loader2 className="w-4 h-4 animate-spin" />
+                            : <Trash2 className="w-4 h-4" />}
+                        {deleteLoading ? 'Deleting account…' : 'Delete My Account'}
+                    </button>
+                </div>
             </div>
 
         </div>

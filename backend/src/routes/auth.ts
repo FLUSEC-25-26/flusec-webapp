@@ -74,4 +74,34 @@ router.post('/profile', authMiddleware, async (req: AuthRequest, res) => {
     res.status(201).json({ data })
 })
 
+// DELETE /api/auth/account — permanently delete the current user's account
+router.delete('/account', authMiddleware, async (req: AuthRequest, res) => {
+    const userId = req.userId!
+
+    // Delete any teams the user leads (findings + members cascade or need manual cleanup)
+    const { data: ledTeams } = await supabaseAdmin
+        .from('teams')
+        .select('id')
+        .eq('leader_id', userId)
+
+    for (const team of ledTeams ?? []) {
+        await supabaseAdmin.from('fix_tasks').delete().eq('team_id', team.id)
+        await supabaseAdmin.from('findings').delete().eq('team_id', team.id)
+        await supabaseAdmin.from('scan_sessions').delete().eq('team_id', team.id)
+        await supabaseAdmin.from('team_members').delete().eq('team_id', team.id)
+        await supabaseAdmin.from('teams').delete().eq('id', team.id)
+    }
+
+    // Remove from any teams they're a member of (not leader)
+    await supabaseAdmin.from('team_members').delete().eq('user_id', userId)
+    // Remove notifications
+    await supabaseAdmin.from('notifications').delete().eq('user_id', userId)
+
+    // Delete the auth user (this also deletes the profile via cascade)
+    const { error } = await supabaseAdmin.auth.admin.deleteUser(userId)
+    if (error) { res.status(500).json({ error: error.message }); return }
+
+    res.json({ data: { message: 'Account deleted successfully' } })
+})
+
 export default router
