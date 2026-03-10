@@ -221,11 +221,6 @@ export default function MemberDashboardPage({ isLeaderView = false }: Props) {
                                 <span className={`badge mt-0.5 flex-shrink-0 badge-${finding.severity}`}>{finding.severity}</span>
                                 <div className="flex-1 min-w-0">
                                     <p className="text-sm font-medium text-white truncate">{finding.title}</p>
-                                    {finding.file_path && (
-                                        <p className="text-xs text-gray-500 font-mono mt-0.5 truncate">
-                                            {finding.file_path}{finding.line_number ? `:${finding.line_number}` : ''}
-                                        </p>
-                                    )}
                                 </div>
                                 <span className={`chip-${finding.module.toLowerCase()} flex-shrink-0`}>{finding.module}</span>
                             </div>
