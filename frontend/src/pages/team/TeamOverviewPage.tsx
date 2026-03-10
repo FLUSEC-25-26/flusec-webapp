@@ -181,7 +181,7 @@ export default function TeamOverviewPage() {
                 <div>
                     <h1 className="text-2xl font-bold text-white">Team Hub</h1>
                     <p className="text-sm text-gray-400 mt-1">
-                        Manage your security teams — create new ones or join existing ones.
+                        Manage your security teams, create new ones or join existing ones.
                     </p>
                 </div>
                 <button onClick={loadTeams} className="btn-secondary" title="Refresh">
