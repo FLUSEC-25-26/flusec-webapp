@@ -2,7 +2,6 @@ import { Router } from 'express'
 import { supabaseAdmin } from '../services/supabaseAdmin'
 import { authMiddleware, type AuthRequest } from '../middleware/authMiddleware'
 import type {
-    ActivePolicyRow,
     ActivePoliciesResponse,
     PolicyComponentCode,
 } from '../types/policies'
@@ -24,7 +23,6 @@ async function getMembership(teamId: string, userId: string) {
     return data
 }
 
-// GET /api/policies/active?team_id=<uuid>
 router.get('/active', authMiddleware, async (req: AuthRequest, res) => {
     const userId = req.userId!
     const teamId = String(req.query['team_id'] ?? '').trim()
@@ -57,31 +55,34 @@ router.get('/active', authMiddleware, async (req: AuthRequest, res) => {
             return
         }
 
-        const { data: rows, error: policiesError } = await supabaseAdmin
-            .schema('private')
-            .from('v_active_team_component_policies')
+        const { data: assignments, error: assignmentsError } = await supabaseAdmin
+            .from('team_policy_assignments')
             .select(`
                 team_id,
                 component_code,
                 assigned_at,
                 assigned_by,
-                policy_id,
-                policy_name,
-                policy_description,
-                policy_version_id,
-                version_no,
-                status,
-                rules_json,
-                heuristics_json,
-                notes,
-                version_created_at,
-                published_at
+                component_policy_versions (
+                    id,
+                    version_no,
+                    status,
+                    rules_json,
+                    heuristics_json,
+                    notes,
+                    created_at,
+                    published_at,
+                    component_policies (
+                        id,
+                        component_code,
+                        name,
+                        description
+                    )
+                )
             `)
             .eq('team_id', teamId)
-            .order('component_code', { ascending: true })
 
-        if (policiesError) {
-            res.status(500).json({ error: policiesError.message })
+        if (assignmentsError) {
+            res.status(500).json({ error: assignmentsError.message })
             return
         }
 
@@ -92,23 +93,36 @@ router.get('/active', authMiddleware, async (req: AuthRequest, res) => {
             IIV: null,
         }
 
-        for (const raw of (rows ?? []) as ActivePolicyRow[]) {
-            policies[raw.component_code] = {
-                component_code: raw.component_code,
-                policy_id: raw.policy_id,
-                policy_name: raw.policy_name,
-                policy_description: raw.policy_description,
-                policy_version_id: raw.policy_version_id,
-                version_no: raw.version_no,
-                status: raw.status,
-                rules_json: Array.isArray(raw.rules_json) ? raw.rules_json : [],
+        for (const row of assignments ?? []) {
+            const componentCode = row.component_code as PolicyComponentCode
+            const version = Array.isArray(row.component_policy_versions)
+                ? row.component_policy_versions[0]
+                : row.component_policy_versions
+
+            if (!version) continue
+
+            const policy = Array.isArray(version.component_policies)
+                ? version.component_policies[0]
+                : version.component_policies
+
+            if (!policy) continue
+
+            policies[componentCode] = {
+                component_code: componentCode,
+                policy_id: policy.id,
+                policy_name: policy.name,
+                policy_description: policy.description ?? null,
+                policy_version_id: version.id,
+                version_no: version.version_no,
+                status: version.status,
+                rules_json: Array.isArray(version.rules_json) ? version.rules_json : [],
                 heuristics_json:
-                    raw.heuristics_json && typeof raw.heuristics_json === 'object'
-                        ? raw.heuristics_json
+                    version.heuristics_json && typeof version.heuristics_json === 'object'
+                        ? version.heuristics_json
                         : null,
-                notes: raw.notes,
-                assigned_at: raw.assigned_at,
-                published_at: raw.published_at,
+                notes: version.notes ?? null,
+                assigned_at: row.assigned_at,
+                published_at: version.published_at ?? null,
             }
         }
 
