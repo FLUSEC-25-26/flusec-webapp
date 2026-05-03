@@ -8,6 +8,7 @@ import TeamOverviewPage from '@/pages/team/TeamOverviewPage'
 import TeamDetailPage from '@/pages/team/TeamDetailPage'
 import TeamSettingsPage from '@/pages/settings/TeamSettingsPage'
 import AppLayout from '@/components/layout/AppLayout'
+import TeamPoliciesPage from '@/pages/team/TeamPoliciesPage'
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
     const { user, loading } = useAuthStore()
@@ -52,6 +53,7 @@ export default function App() {
                     <Route path="/team/:teamId" element={<TeamDetailPage />} />
                     <Route path="/team/:teamId/settings" element={<TeamSettingsPage />} />
                     <Route path="/team/:teamId/member/:userId" element={<MemberDashboardPage isLeaderView />} />
+                    <Route path="/team/:teamId/policies" element={<TeamPoliciesPage />} />
                 </Route>
 
                 {/* Default */}

@@ -1,67 +1,111 @@
 import { create } from 'zustand'
 import { supabase } from '@/lib/supabase'
+import { clearPolicyApiTokenCache } from '@/lib/policyApi'
 import type { Profile } from '@/types'
 
+const API_BASE_URL =
+  import.meta.env.VITE_API_BASE_URL?.replace(/\/$/, '') || 'http://localhost:3001'
+
 interface AuthState {
-    user: Profile | null
-    loading: boolean
-    initialized: boolean
-    setUser: (user: Profile | null) => void
-    initialize: () => Promise<void>
-    signOut: () => Promise<void>
+  user: Profile | null
+  loading: boolean
+  initialized: boolean
+  setUser: (user: Profile | null) => void
+  initialize: () => Promise<void>
+  signOut: () => Promise<void>
 }
 
 async function fetchProfile(userId: string): Promise<Profile | null> {
-    // Try backend first (auto-creates profile if trigger missed)
-    const { data: { session } } = await supabase.auth.getSession()
-    if (!session) return null
+  const {
+    data: { session },
+  } = await supabase.auth.getSession()
 
-    try {
-        const res = await fetch('/api/auth/me', {
-            headers: { Authorization: `Bearer ${session.access_token}` }
-        })
-        if (res.ok) {
-            const json = await res.json() as { data: { profile: Profile } }
-            return json.data.profile
-        }
-    } catch { /* fallthrough */ }
+  if (!session) return null
 
-    // Fallback: direct Supabase query
-    const { data } = await supabase.from('profiles').select('*').eq('id', userId).maybeSingle()
-    return data ?? null
+  try {
+    const res = await fetch(`${API_BASE_URL}/api/auth/me`, {
+      headers: {
+        Authorization: `Bearer ${session.access_token}`,
+      },
+    })
+
+    if (res.ok) {
+      const json = (await res.json()) as { data: { profile: Profile } }
+      return json.data.profile
+    }
+  } catch {
+    // fall through to direct profile lookup
+  }
+
+  const { data } = await supabase
+    .from('profiles')
+    .select('*')
+    .eq('id', userId)
+    .maybeSingle()
+
+  return data ?? null
 }
 
 export const useAuthStore = create<AuthState>((set) => ({
-    user: null,
-    loading: true,
-    initialized: false,
+  user: null,
+  loading: true,
+  initialized: false,
 
-    setUser: (user) => set({ user }),
+  setUser: (user) => set({ user }),
 
-    initialize: async () => {
-        set({ loading: true })
+  initialize: async () => {
+    set({ loading: true })
 
-        const { data: { session } } = await supabase.auth.getSession()
-        if (session?.user) {
-            const profile = await fetchProfile(session.user.id)
-            set({ user: profile })
-        }
+    const {
+      data: { session },
+    } = await supabase.auth.getSession()
 
-        // Listen for login/logout
-        supabase.auth.onAuthStateChange(async (_event, session) => {
-            if (session?.user) {
-                const profile = await fetchProfile(session.user.id)
-                set({ user: profile, loading: false })
-            } else {
-                set({ user: null, loading: false })
-            }
+    if (session?.user) {
+      const profile = await fetchProfile(session.user.id)
+      set({
+        user: profile,
+        loading: false,
+        initialized: true,
+      })
+    } else {
+      clearPolicyApiTokenCache()
+      set({
+        user: null,
+        loading: false,
+        initialized: true,
+      })
+    }
+
+    supabase.auth.onAuthStateChange(async (_event, session) => {
+      if (session?.user) {
+        const profile = await fetchProfile(session.user.id)
+        set({
+          user: profile,
+          loading: false,
+          initialized: true,
         })
+      } else {
+        clearPolicyApiTokenCache()
+        set({
+          user: null,
+          loading: false,
+          initialized: true,
+        })
+      }
+    })
+  },
 
-        set({ loading: false, initialized: true })
-    },
+  signOut: async () => {
+    clearPolicyApiTokenCache()
 
-    signOut: async () => {
-        await supabase.auth.signOut()
-        set({ user: null })
-    },
+    try {
+      await supabase.auth.signOut({ scope: 'local' })
+    } finally {
+      set({
+        user: null,
+        loading: false,
+        initialized: true,
+      })
+    }
+  },
 }))

@@ -37,6 +37,16 @@ export interface ActivePolicyComponentPayload {
     published_at: string | null
 }
 
+export interface TeamPolicyResponse {
+    team: {
+        id: string
+        name: string
+        description?: string | null
+        leader_id: string
+    }
+    policies: Record<PolicyComponentCode, ActivePolicyComponentPayload | null>
+}
+
 export interface ActivePoliciesResponse {
     team: {
         id: string
@@ -44,4 +54,13 @@ export interface ActivePoliciesResponse {
         description?: string | null
     }
     policies: Record<PolicyComponentCode, ActivePolicyComponentPayload | null>
+}
+
+export interface PublishPolicyRequest {
+    component_code: PolicyComponentCode
+    policy_name?: string
+    policy_description?: string | null
+    rules_json: unknown[]
+    heuristics_json?: Record<string, unknown> | null
+    notes?: string | null
 }
