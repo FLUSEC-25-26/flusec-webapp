@@ -11,7 +11,7 @@ import {
 } from 'lucide-react'
 
 const navItems = [
-  { to: '/dashboard', label: 'My Dashboard', icon: LayoutDashboard, end: true },
+  { to: '/dashboard', label: 'Team Dashboard', icon: LayoutDashboard, end: true },
   { to: '/team', label: 'Team Hub', icon: Users, end: true },
 ]
 
@@ -32,9 +32,7 @@ export default function AppLayout() {
 
   return (
     <div className="h-screen overflow-hidden bg-surface flex">
-      {/* Sidebar */}
       <aside className="w-64 flex-shrink-0 h-screen bg-surface-secondary border-r border-surface-border flex flex-col">
-        {/* Logo */}
         <div className="p-6 border-b border-surface-border shrink-0">
           <div className="flex items-center gap-3">
             <div className="w-9 h-9 rounded-lg bg-gradient-brand flex items-center justify-center shadow-glow-brand">
@@ -49,7 +47,6 @@ export default function AppLayout() {
           </div>
         </div>
 
-        {/* Nav */}
         <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
           {navItems.map(({ to, label, icon: Icon, end }) => (
             <NavLink
@@ -81,7 +78,6 @@ export default function AppLayout() {
           ))}
         </nav>
 
-        {/* User */}
         <div className="p-4 border-t border-surface-border shrink-0">
           <div className="flex items-center gap-3">
             <div className="w-8 h-8 rounded-full bg-gradient-brand flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
@@ -107,9 +103,7 @@ export default function AppLayout() {
         </div>
       </aside>
 
-      {/* Right side */}
       <div className="flex-1 min-w-0 h-screen flex flex-col overflow-hidden">
-        {/* Topbar */}
         <header className="h-14 shrink-0 border-b border-surface-border bg-surface-secondary/50 backdrop-blur flex items-center justify-end px-6 gap-3">
           <button type="button" className="btn-ghost p-2 relative">
             <Bell className="w-4 h-4" />
@@ -117,7 +111,6 @@ export default function AppLayout() {
           </button>
         </header>
 
-        {/* Scrollable page content only */}
         <main className="flex-1 min-h-0 overflow-y-auto p-6 animate-fade-in">
           <Outlet />
         </main>
