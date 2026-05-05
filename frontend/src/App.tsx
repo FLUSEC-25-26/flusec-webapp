@@ -11,6 +11,7 @@ import TeamSettingsPage from '@/pages/settings/TeamSettingsPage'
 import TeamPoliciesPage from '@/pages/team/TeamPoliciesPage'
 import TeamFindingsPage from '@/pages/team/TeamFindingsPage'
 import TeamComponentDashboardPage from '@/pages/team/TeamComponentDashboardPage'
+import TeamCommunicationPage from '@/pages/team/TeamCommunicationPage'
 import AppLayout from '@/components/layout/AppLayout'
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -57,6 +58,7 @@ export default function App() {
                     <Route path="/team/:teamId" element={<TeamDetailPage />} />
                     <Route path="/team/:teamId/findings" element={<TeamFindingsPage />} />
                     <Route path="/team/:teamId/components/:component" element={<TeamComponentDashboardPage />} />
+                    <Route path="/team/:teamId/communication" element={<TeamCommunicationPage />} />
                     <Route path="/team/:teamId/settings" element={<TeamSettingsPage />} />
                     <Route path="/team/:teamId/policies" element={<TeamPoliciesPage />} />
                     <Route path="/team/:teamId/member/:userId" element={<MemberDashboardPage isLeaderView />} />

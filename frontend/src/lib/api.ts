@@ -9,6 +9,12 @@ import type {
     TeamMember,
     TeamWithRole,
 } from '@/types'
+import type {
+    TeamChatMessage,
+    TeamMessageKind,
+    TeamRoomPayload,
+    TeamThreadCollection,
+} from '@/types/chat'
 
 const API_BASE_URL =
     import.meta.env.VITE_API_BASE_URL?.replace(/\/$/, '') || 'http://localhost:3001'
@@ -152,13 +158,13 @@ export const getTeamFindings = (
 ) => {
     const qs = params
         ? '?' + new URLSearchParams(
-            Object.entries(params)
-                .filter(([, value]) => value !== undefined && value !== '')
-                .reduce<Record<string, string>>((acc, [key, value]) => {
-                    acc[key] = String(value)
-                    return acc
-                }, {})
-        ).toString()
+              Object.entries(params)
+                  .filter(([, value]) => value !== undefined && value !== '')
+                  .reduce<Record<string, string>>((acc, [key, value]) => {
+                      acc[key] = String(value)
+                      return acc
+                  }, {})
+          ).toString()
         : ''
 
     return request<ApiResponse<Finding[]>>(`/api/findings/team/${teamId}${qs}`)
@@ -169,6 +175,53 @@ export const getMemberFindings = (userId: string) =>
 
 export const getFinding = (id: string) =>
     request<ApiResponse<Finding>>(`/api/findings/${id}`)
+
+// ─── Communication ────────────────────────────────────────────
+export const getTeamThreads = (teamId: string) =>
+    request<ApiResponse<TeamThreadCollection>>(`/api/chat/team/${teamId}/threads`)
+
+export const getTeamRoomMessages = (
+    teamId: string,
+    params?: { finding_id?: string; limit?: number }
+) => {
+    const qs = params
+        ? '?' + new URLSearchParams(
+              Object.entries(params)
+                  .filter(([, value]) => value !== undefined && value !== '')
+                  .reduce<Record<string, string>>((acc, [key, value]) => {
+                      acc[key] = String(value)
+                      return acc
+                  }, {})
+          ).toString()
+        : ''
+
+    return request<ApiResponse<TeamRoomPayload>>(`/api/chat/team/${teamId}/messages${qs}`)
+}
+
+export const sendTeamMessage = (
+    teamId: string,
+    payload: {
+        message_text: string
+        finding_id?: string | null
+        reply_to_message_id?: string | null
+        message_kind?: TeamMessageKind
+    }
+) =>
+    request<ApiResponse<TeamChatMessage>>(`/api/chat/team/${teamId}/messages`, {
+        method: 'POST',
+        body: JSON.stringify(payload),
+    })
+
+export const editTeamMessage = (messageId: string, message_text: string) =>
+    request<ApiResponse<TeamChatMessage>>(`/api/chat/messages/${messageId}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ message_text }),
+    })
+
+export const deleteTeamMessage = (messageId: string) =>
+    request<ApiResponse<{ message: string }>>(`/api/chat/messages/${messageId}`, {
+        method: 'DELETE',
+    })
 
 // ─── Member Stats ─────────────────────────────────────────────
 export const getMemberStats = (userId: string) =>

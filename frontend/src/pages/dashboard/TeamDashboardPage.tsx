@@ -9,6 +9,7 @@ import {
     Globe,
     KeyRound,
     Loader2,
+    MessageSquare,
     RefreshCw,
     Search,
     ShieldAlert,
@@ -66,11 +67,6 @@ const COMPONENTS: Array<{
         color: '#ec4899',
     },
 ]
-
-function firstName(value?: string | null) {
-    if (!value) return 'Member'
-    return value.split(' ')[0] ?? value
-}
 
 function clampScore(score: number) {
     return Math.max(0, Math.min(100, Math.round(score)))
@@ -351,6 +347,15 @@ export default function TeamDashboardPage() {
                     >
                         <Search className="w-4 h-4" />
                         View Findings
+                    </button>
+
+                    <button
+                        type="button"
+                        className="btn-secondary"
+                        onClick={() => navigate(`/team/${selectedTeamId}/communication`)}
+                    >
+                        <MessageSquare className="w-4 h-4" />
+                        Communication
                     </button>
 
                     {selectedTeamSummary?.myRole === 'leader' && (
