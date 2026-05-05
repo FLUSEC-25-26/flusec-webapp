@@ -1,6 +1,7 @@
 import { Outlet, NavLink, useNavigate } from 'react-router-dom'
 import { useAuthStore } from '@/stores/authStore'
 import { clearPolicyApiTokenCache } from '@/lib/policyApi'
+import { clearApiTokenCache } from '@/lib/api'
 import {
   ShieldCheck,
   LayoutDashboard,
@@ -11,7 +12,7 @@ import {
 } from 'lucide-react'
 
 const navItems = [
-  { to: '/dashboard', label: 'My Dashboard', icon: LayoutDashboard, end: true },
+  { to: '/dashboard', label: 'Team Dashboard', icon: LayoutDashboard, end: true },
   { to: '/team', label: 'Team Hub', icon: Users, end: true },
 ]
 
@@ -22,6 +23,7 @@ export default function AppLayout() {
   const handleSignOut = async () => {
     try {
       clearPolicyApiTokenCache()
+      clearApiTokenCache()
       await signOut()
     } catch (error) {
       console.error('Logout failed:', error)

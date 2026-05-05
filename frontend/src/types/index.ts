@@ -1,6 +1,3 @@
-// Shared TypeScript types used across frontend and backend
-
-// ─── User & Auth ──────────────────────────────────────────────
 export type UserRole = 'leader' | 'member' | 'viewer';
 
 export interface Profile {
@@ -11,14 +8,18 @@ export interface Profile {
     created_at: string;
 }
 
-// ─── Teams ────────────────────────────────────────────────────
 export interface Team {
     id: string;
+    team_code?: string | null;
     name: string;
-    description?: string;
+    description?: string | null;
     invite_code: string;
     leader_id: string;
     created_at: string;
+}
+
+export interface TeamWithRole extends Team {
+    myRole: 'leader' | 'member';
 }
 
 export interface TeamMember {
@@ -31,7 +32,6 @@ export interface TeamMember {
     stats?: MemberStats;
 }
 
-// ─── Projects ─────────────────────────────────────────────────
 export interface Project {
     id: string;
     team_id: string;
@@ -40,10 +40,17 @@ export interface Project {
     created_at: string;
 }
 
-// ─── Findings & Scans ─────────────────────────────────────────
 export type SeverityLevel = 'critical' | 'high' | 'medium' | 'low';
 export type AdvisorModule = 'HSD' | 'SNC' | 'SDS' | 'IVS';
 export type FindingStatus = 'open' | 'in_progress' | 'resolved';
+export type RiskLevel = 'critical' | 'high' | 'medium' | 'low';
+
+export interface TaintFlowStep {
+    type?: string;
+    line?: number | null;
+    column?: number | null;
+    description?: string | null;
+}
 
 export interface Finding {
     id: string;
@@ -51,17 +58,29 @@ export interface Finding {
     team_id: string;
     uploaded_by: string;
     module: AdvisorModule;
-    rule_id?: string;
+    rule_id?: string | null;
     title: string;
-    description?: string;
+    description?: string | null;
     severity: SeverityLevel;
-    file_path?: string;
-    line_number?: number;
-    code_snippet?: string;
+    original_severity?: string | null;
+    risk_level?: RiskLevel | null;
+    risk_score?: number | null;
+    file_path?: string | null;
+    line_number?: number | null;
+    column_number?: number | null;
+    code_snippet?: string | null;
+    function_name?: string | null;
+    complexity?: number | null;
+    nesting_depth?: number | null;
+    function_loc?: number | null;
+    secret_type?: string | null;
+    taint_flow?: TaintFlowStep[] | null;
+    data_type?: string | null;
+    storage_context?: string | null;
     owasp_category?: string;
     status: FindingStatus;
     created_at: string;
-    profile?: Profile;
+    profile?: Profile | null;
 }
 
 export interface ScanSession {
@@ -79,7 +98,6 @@ export interface ScanSession {
     scanned_at: string;
 }
 
-// ─── Stats & Charts ───────────────────────────────────────────
 export interface MemberStats {
     total: number;
     critical: number;
@@ -88,11 +106,11 @@ export interface MemberStats {
     low: number;
     by_module: Record<AdvisorModule, number>;
     last_scanned_at?: string;
-    risk_score: number; // 0–100
+    risk_score: number;
 }
 
 export interface TimelineDataPoint {
-    date: string;     // ISO date string
+    date: string;
     total: number;
     critical: number;
     high: number;
@@ -100,7 +118,6 @@ export interface TimelineDataPoint {
     low: number;
 }
 
-// ─── Fix Tasks ────────────────────────────────────────────────
 export type TaskPriority = 'critical' | 'high' | 'medium' | 'low';
 export type TaskStatus = 'open' | 'in_progress' | 'done';
 
@@ -120,7 +137,6 @@ export interface FixTask {
     assignee?: Profile;
 }
 
-// ─── API Response Wrappers ─────────────────────────────────────
 export interface ApiResponse<T> {
     data: T;
     message?: string;
@@ -131,7 +147,6 @@ export interface ApiError {
     code?: string;
 }
 
-// ─── Upload Payload (from VS Code extension) ──────────────────
 export interface FindingsUploadPayload {
     team_id: string;
     project_id?: string;
@@ -144,8 +159,19 @@ export interface RawFinding {
     rule_id?: string;
     title: string;
     description?: string;
-    severity: SeverityLevel;
+    severity: string;
+    original_severity?: string | null;
     file_path?: string;
     line_number?: number;
+    column_number?: number;
     code_snippet?: string;
+    function_name?: string | null;
+    complexity?: number | null;
+    nesting_depth?: number | null;
+    function_loc?: number | null;
+    secret_type?: string | null;
+    taint_flow?: TaintFlowStep[] | null;
+    risk_level?: string | null;
+    data_type?: string | null;
+    storage_context?: string | null;
 }

@@ -3,12 +3,15 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { useAuthStore } from '@/stores/authStore'
 import LoginPage from '@/pages/auth/LoginPage'
 import SignupPage from '@/pages/auth/SignupPage'
+import TeamDashboardPage from '@/pages/dashboard/TeamDashboardPage'
 import MemberDashboardPage from '@/pages/dashboard/MemberDashboardPage'
 import TeamOverviewPage from '@/pages/team/TeamOverviewPage'
 import TeamDetailPage from '@/pages/team/TeamDetailPage'
 import TeamSettingsPage from '@/pages/settings/TeamSettingsPage'
-import AppLayout from '@/components/layout/AppLayout'
 import TeamPoliciesPage from '@/pages/team/TeamPoliciesPage'
+import TeamFindingsPage from '@/pages/team/TeamFindingsPage'
+import TeamComponentDashboardPage from '@/pages/team/TeamComponentDashboardPage'
+import AppLayout from '@/components/layout/AppLayout'
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
     const { user, loading } = useAuthStore()
@@ -37,26 +40,28 @@ function FullPageLoader() {
 
 export default function App() {
     const { initialize } = useAuthStore()
-    useEffect(() => { initialize() }, [initialize])
+
+    useEffect(() => {
+        void initialize()
+    }, [initialize])
 
     return (
         <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
             <Routes>
-                {/* Public */}
                 <Route path="/login" element={<PublicRoute><LoginPage /></PublicRoute>} />
                 <Route path="/signup" element={<PublicRoute><SignupPage /></PublicRoute>} />
 
-                {/* App — just needs auth */}
                 <Route element={<ProtectedRoute><AppLayout /></ProtectedRoute>}>
-                    <Route path="/dashboard" element={<MemberDashboardPage />} />
+                    <Route path="/dashboard" element={<TeamDashboardPage />} />
                     <Route path="/team" element={<TeamOverviewPage />} />
                     <Route path="/team/:teamId" element={<TeamDetailPage />} />
+                    <Route path="/team/:teamId/findings" element={<TeamFindingsPage />} />
+                    <Route path="/team/:teamId/components/:component" element={<TeamComponentDashboardPage />} />
                     <Route path="/team/:teamId/settings" element={<TeamSettingsPage />} />
-                    <Route path="/team/:teamId/member/:userId" element={<MemberDashboardPage isLeaderView />} />
                     <Route path="/team/:teamId/policies" element={<TeamPoliciesPage />} />
+                    <Route path="/team/:teamId/member/:userId" element={<MemberDashboardPage isLeaderView />} />
                 </Route>
 
-                {/* Default */}
                 <Route path="*" element={<Navigate to="/dashboard" replace />} />
             </Routes>
         </BrowserRouter>

@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { supabase } from '@/lib/supabase'
 import { clearPolicyApiTokenCache } from '@/lib/policyApi'
+import { clearApiTokenCache } from '@/lib/api'
 import type { Profile } from '@/types'
 
 const API_BASE_URL =
@@ -69,6 +70,7 @@ export const useAuthStore = create<AuthState>((set) => ({
       })
     } else {
       clearPolicyApiTokenCache()
+      clearApiTokenCache()
       set({
         user: null,
         loading: false,
@@ -86,6 +88,7 @@ export const useAuthStore = create<AuthState>((set) => ({
         })
       } else {
         clearPolicyApiTokenCache()
+        clearApiTokenCache()
         set({
           user: null,
           loading: false,
@@ -97,6 +100,7 @@ export const useAuthStore = create<AuthState>((set) => ({
 
   signOut: async () => {
     clearPolicyApiTokenCache()
+    clearApiTokenCache()
 
     try {
       await supabase.auth.signOut({ scope: 'local' })

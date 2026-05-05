@@ -14,7 +14,8 @@
         "resolveJsonModule": true,
         "declaration": true,
         "noUnusedLocals": false,
-        "noUnusedParameters": false
+        "noUnusedParameters": false,
+         "ignoreDeprecations": "6.0"
     },
     "include": [
         "src"
