@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { supabase } from '@/lib/supabase'
-import { createTeam, joinTeam } from '@/lib/api'
+import { createTeam, joinTeam, getMyTeams } from '@/lib/api'
 import {
   ShieldCheck,
   Users,
@@ -17,8 +16,6 @@ import {
   RefreshCw,
 } from 'lucide-react'
 
-const API_BASE_URL =
-  import.meta.env.VITE_API_BASE_URL?.replace(/\/$/, '') || 'http://localhost:3001'
 
 interface MyTeam {
   id: string
@@ -53,27 +50,11 @@ export default function TeamOverviewPage() {
   async function loadTeams() {
     setLoadingTeams(true)
     try {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession()
-
-      if (!session) {
-        setTeams([])
-        return
-      }
-
-      const res = await fetch(`${API_BASE_URL}/api/teams/my-teams`, {
-        headers: {
-          Authorization: `Bearer ${session.access_token}`,
-        },
-      })
-
-      if (res.ok) {
-        const json = (await res.json()) as { data: MyTeam[] }
-        setTeams(json.data)
-      } else {
-        setTeams([])
-      }
+      const response = await getMyTeams()
+      setTeams(response.data as MyTeam[])
+    } catch (error) {
+      console.error('[FLUSEC] Failed to load teams:', error)
+      setTeams([])
     } finally {
       setLoadingTeams(false)
     }

@@ -1,506 +1,405 @@
 import { Router } from 'express'
 import { supabaseAdmin } from '../services/supabaseAdmin'
 import { authMiddleware, type AuthRequest } from '../middleware/authMiddleware'
-import type {
-    AdvisorModule,
-    RawFinding,
-    RiskLevel,
-    SeverityLevel,
-    TaintFlowStep,
-} from '../types'
+import { getTeamMembership, requireFindingAccess, requireTeamMember } from '../middleware/accessControl'
+import { normalizeFinding } from '../services/findingNormalizer'
+import type { RawFinding, ScanScope, SecuritySeverity } from '../types'
 
 const router = Router()
 
-function asString(value: unknown): string | null {
-    return typeof value === 'string' && value.trim() ? value.trim() : null
+interface UploadBody {
+  team_id: string
+  project_id?: string | null
+  workspace_id: string
+  scan_scope: ScanScope
+  scanned_target: string
+  findings: RawFinding[]
 }
 
-function asNumber(value: unknown): number | null {
-    return typeof value === 'number' && Number.isFinite(value) ? value : null
+function isScanScope(value: unknown): value is ScanScope {
+  return value === 'file' || value === 'project'
 }
 
-function asArray<T = unknown>(value: unknown): T[] | null {
-    return Array.isArray(value) ? (value as T[]) : null
+function countSeverities(findings: ReturnType<typeof normalizeFinding>[]) {
+  const counts: Record<SecuritySeverity, number> = {
+    critical: 0,
+    high: 0,
+    medium: 0,
+    low: 0,
+  }
+  for (const finding of findings) counts[finding.security_severity] += 1
+  return counts
 }
 
-function normalizeModule(finding: RawFinding): AdvisorModule {
-    const raw = String(finding.module ?? finding.component ?? 'HSD').trim().toUpperCase()
-
-    if (raw === 'HSD') return 'HSD'
-    if (raw === 'NET' || raw === 'SNC') return 'SNC'
-    if (raw === 'IDS' || raw === 'SDS') return 'SDS'
-    if (raw === 'IIV' || raw === 'IVS') return 'IVS'
-
-    return 'HSD'
+async function validateProject(teamId: string, projectId?: string | null) {
+  if (!projectId) return true
+  const { data, error } = await supabaseAdmin
+    .from('projects')
+    .select('id')
+    .eq('id', projectId)
+    .eq('team_id', teamId)
+    .maybeSingle()
+  if (error) throw new Error(error.message)
+  return Boolean(data)
 }
 
-function normalizeOriginalSeverity(finding: RawFinding): string {
-    return (
-        asString(finding.original_severity) ??
-        asString(finding.originalSeverity) ??
-        asString(finding.severity) ??
-        asString(finding.risk_level) ??
-        asString(finding.riskLevel) ??
-        'warning'
-    ).toLowerCase()
-}
-
-function normalizeRiskLevelLike(raw: string | null): RiskLevel | null {
-    const value = (raw ?? '').trim().toLowerCase()
-
-    if (!value) return null
-    if (value === 'critical' || value === 'error') return 'critical'
-    if (value === 'high') return 'high'
-    if (value === 'medium' || value === 'med') return 'medium'
-    if (value === 'low' || value === 'warning' || value === 'info') return 'low'
-
-    return null
-}
-
-function levelToScore(level: RiskLevel): number {
-    if (level === 'critical') return 95
-    if (level === 'high') return 75
-    if (level === 'medium') return 55
-    return 30
-}
-
-function scoreToLevel(score: number): RiskLevel {
-    if (score >= 85) return 'critical'
-    if (score >= 65) return 'high'
-    if (score >= 45) return 'medium'
-    return 'low'
-}
-
-function clampScore(score: number): number {
-    return Math.max(0, Math.min(100, Math.round(score)))
-}
-
-function complexityPoints(value: number | null): number {
-    if (value == null) return 0
-    if (value <= 2) return 1
-    if (value <= 5) return 2
-    return 3
-}
-
-function nestingPoints(value: number | null): number {
-    if (value == null) return 0
-    if (value <= 1) return 1
-    if (value <= 3) return 2
-    return 3
-}
-
-function locPoints(value: number | null): number {
-    if (value == null) return 0
-    if (value <= 15) return 1
-    if (value <= 30) return 2
-    return 3
-}
-
-function taintPoints(value: TaintFlowStep[] | null): number {
-    if (!value || value.length === 0) return 0
-    if (value.length === 1) return 1
-    if (value.length <= 3) return 2
-    return 3
-}
-
-function secretPoints(secretType: string | null): number {
-    const value = (secretType ?? '').toUpperCase()
-    if (!value) return 0
-
-    if (
-        value.includes('PASSWORD') ||
-        value.includes('SECRET_KEY') ||
-        value.includes('ENCRYPTION_KEY') ||
-        value.includes('PRIVATE_KEY') ||
-        value.includes('ACCESS_KEY') ||
-        value.includes('JWT_TOKEN') ||
-        value.includes('TOKEN')
-    ) {
-        return 1
-    }
-
-    return 0
-}
-
-function deriveHsdRisk(finding: RawFinding): {
-    severity: SeverityLevel
-    riskLevel: RiskLevel
-    riskScore: number
-} {
-    const complexity = asNumber(finding.complexity)
-    const nestingDepth = asNumber(finding.nesting_depth ?? finding.nestingDepth)
-    const functionLoc = asNumber(finding.function_loc ?? finding.functionLoc)
-    const secretType = asString(finding.secret_type ?? finding.secretType)
-    const taintFlow = asArray<TaintFlowStep>(finding.taint_flow ?? finding.taintFlow)
-
-    const total =
-        complexityPoints(complexity) +
-        nestingPoints(nestingDepth) +
-        locPoints(functionLoc) +
-        taintPoints(taintFlow) +
-        secretPoints(secretType)
-
-    let riskLevel: RiskLevel
-    let riskScore: number
-
-    if (total <= 4) {
-        riskLevel = 'low'
-        riskScore = 24 + total * 4
-    } else if (total <= 6) {
-        riskLevel = 'medium'
-        riskScore = 40 + (total - 4) * 10
-    } else {
-        riskLevel = 'high'
-        riskScore = 70 + Math.min(25, (total - 6) * 10)
-    }
-
-    return {
-        severity: riskLevel,
-        riskLevel,
-        riskScore: clampScore(riskScore),
-    }
-}
-
-function idsDataTypeBonus(raw: string | null): number {
-    const value = (raw ?? '').toLowerCase()
-
-    if (
-        value.includes('password') ||
-        value.includes('token') ||
-        value.includes('secret') ||
-        value.includes('key') ||
-        value.includes('credential') ||
-        value.includes('encryption')
-    ) {
-        return 15
-    }
-
-    if (
-        value.includes('email') ||
-        value.includes('phone') ||
-        value.includes('address') ||
-        value.includes('payment') ||
-        value.includes('personal') ||
-        value.includes('pii')
-    ) {
-        return 10
-    }
-
-    return 0
-}
-
-function idsStorageBonus(raw: string | null): number {
-    const value = (raw ?? '').toLowerCase()
-
-    if (
-        value.includes('shared_preferences') ||
-        value.includes('sqlite') ||
-        value.includes('local file') ||
-        value.includes('file') ||
-        value.includes('plaintext') ||
-        value.includes('cache')
-    ) {
-        return 10
-    }
-
-    return 0
-}
-
-function deriveIdsRisk(finding: RawFinding): {
-    severity: SeverityLevel
-    riskLevel: RiskLevel
-    riskScore: number
-} {
-    const incomingLevel =
-        normalizeRiskLevelLike(asString(finding.risk_level ?? finding.riskLevel)) ??
-        normalizeRiskLevelLike(asString(finding.severity)) ??
-        'low'
-
-    const dataType = asString(finding.data_type ?? finding.dataType)
-    const storageContext = asString(finding.storage_context ?? finding.storageContext)
-
-    const score = clampScore(
-        levelToScore(incomingLevel) +
-        idsDataTypeBonus(dataType) +
-        idsStorageBonus(storageContext)
-    )
-
-    const riskLevel = scoreToLevel(score)
-
-    return {
-        severity: riskLevel,
-        riskLevel,
-        riskScore: score,
-    }
-}
-
-function deriveStandardRisk(finding: RawFinding): {
-    severity: SeverityLevel
-    riskLevel: RiskLevel
-    riskScore: number
-} {
-    const level =
-        normalizeRiskLevelLike(asString(finding.risk_level ?? finding.riskLevel)) ??
-        normalizeRiskLevelLike(asString(finding.severity)) ??
-        'low'
-
-    const score = clampScore(levelToScore(level))
-
-    return {
-        severity: level,
-        riskLevel: level,
-        riskScore: score,
-    }
-}
-
-function normalizeFinding(finding: RawFinding) {
-    const module = normalizeModule(finding)
-    const originalSeverity = normalizeOriginalSeverity(finding)
-
-    const risk =
-        module === 'HSD'
-            ? deriveHsdRisk(finding)
-            : module === 'SDS'
-                ? deriveIdsRisk(finding)
-                : deriveStandardRisk(finding)
-
-    return {
-        module,
-        rule_id: asString(finding.rule_id ?? finding.ruleId),
-        title: asString(finding.title ?? finding.message) ?? 'Security finding',
-        description: asString(finding.description),
-        severity: risk.severity,
-        original_severity: originalSeverity,
-        risk_level: risk.riskLevel,
-        risk_score: risk.riskScore,
-        file_path: asString(finding.file_path ?? finding.filePath ?? finding.file),
-        line_number: asNumber(finding.line_number ?? finding.lineNumber ?? finding.line),
-        column_number: asNumber(finding.column_number ?? finding.columnNumber ?? finding.column),
-        code_snippet: asString(finding.code_snippet ?? finding.codeSnippet ?? finding.snippet),
-        function_name: asString(finding.function_name ?? finding.functionName),
-        complexity: asNumber(finding.complexity),
-        nesting_depth: asNumber(finding.nesting_depth ?? finding.nestingDepth),
-        function_loc: asNumber(finding.function_loc ?? finding.functionLoc),
-        secret_type: asString(finding.secret_type ?? finding.secretType),
-        taint_flow: asArray<TaintFlowStep>(finding.taint_flow ?? finding.taintFlow),
-        data_type: asString(finding.data_type ?? finding.dataType),
-        storage_context: asString(finding.storage_context ?? finding.storageContext),
-    }
-}
-
-// POST /api/findings/upload
-router.post('/upload', authMiddleware, async (req: AuthRequest, res) => {
-    const { team_id, project_id, scanned_file, findings } = req.body as {
-        team_id: string
-        project_id?: string
-        scanned_file: string
-        findings: RawFinding[]
-    }
-
-    if (!team_id || !scanned_file || !Array.isArray(findings)) {
-        res.status(400).json({ error: 'team_id, scanned_file, and findings are required' })
-        return
-    }
-
-    const { data: membership } = await supabaseAdmin
-        .from('team_members')
-        .select('id')
-        .eq('team_id', team_id)
-        .eq('user_id', req.userId!)
-        .single()
-
-    if (!membership) {
-        res.status(403).json({ error: 'Not a member of this team' })
-        return
-    }
-
-    const processedFindings = findings.map(normalizeFinding)
-
-    const counts: Record<SeverityLevel, number> = {
-        critical: 0,
-        high: 0,
-        medium: 0,
-        low: 0,
-    }
-
-    processedFindings.forEach((finding) => {
-        counts[finding.severity] += 1
+async function writeArchiveBestEffort(
+  teamId: string,
+  userId: string,
+  sessionId: string,
+  payload: unknown
+): Promise<string | null> {
+  const storagePath = `${teamId}/${userId}/${sessionId}.json`
+  const { error } = await supabaseAdmin.storage
+    .from('findings')
+    .upload(storagePath, JSON.stringify(payload, null, 2), {
+      contentType: 'application/json',
+      upsert: true,
     })
 
-    const storagePath = `${team_id}/${req.userId}/${Date.now()}_findings.json`
+  if (error) {
+    console.warn('[FLUSEC] Findings archive upload skipped:', error.message)
+    return null
+  }
+  return storagePath
+}
 
-    const storageUpload = await supabaseAdmin.storage
-        .from('findings')
-        .upload(storagePath, JSON.stringify(processedFindings, null, 2), {
-            contentType: 'application/json',
-            upsert: false,
-        })
+// POST /api/v1/findings/upload
+router.post('/upload', authMiddleware, requireTeamMember, async (req: AuthRequest, res, next) => {
+  try {
+    const body = req.body as UploadBody
+    const teamId = String(body.team_id ?? '').trim()
+    const workspaceId = String(body.workspace_id ?? '').trim()
+    const scannedTarget = String(body.scanned_target ?? '').trim()
 
-    if (storageUpload.error) {
-        res.status(500).json({ error: storageUpload.error.message })
-        return
+    if (!teamId || !workspaceId || !scannedTarget || !Array.isArray(body.findings)) {
+      res.status(400).json({
+        error: 'team_id, workspace_id, scanned_target, and findings are required',
+      })
+      return
+    }
+    if (!isScanScope(body.scan_scope)) {
+      res.status(400).json({ error: 'scan_scope must be "file" or "project"' })
+      return
+    }
+    if (scannedTarget !== '.' && (
+      scannedTarget.startsWith('/') ||
+      /^[A-Za-z]:[\\/]/.test(scannedTarget) ||
+      scannedTarget.split(/[\\/]+/).includes('..')
+    )) {
+      res.status(400).json({ error: 'scanned_target must be a workspace-relative path' })
+      return
+    }
+    if (!(await validateProject(teamId, body.project_id))) {
+      res.status(400).json({ error: 'project_id does not belong to this team' })
+      return
     }
 
-    const { data: session, error: sessionErr } = await supabaseAdmin
+    if (body.findings.length > 10000) {
+      res.status(413).json({ error: 'A single scan session cannot upload more than 10,000 findings' })
+      return
+    }
+
+    let processed: ReturnType<typeof normalizeFinding>[]
+    try {
+      processed = body.findings.map(normalizeFinding)
+    } catch (error) {
+      res.status(400).json({
+        error: error instanceof Error ? error.message : 'Invalid finding payload',
+      })
+      return
+    }
+
+    const counts = countSeverities(processed)
+    const now = new Date().toISOString()
+
+    const { data: session, error: sessionError } = await supabaseAdmin
+      .from('scan_sessions')
+      .insert({
+        team_id: teamId,
+        project_id: body.project_id ?? null,
+        uploaded_by: req.userId!,
+        workspace_id: workspaceId,
+        scan_scope: body.scan_scope,
+        scanned_target: scannedTarget,
+        total_count: processed.length,
+        critical_count: counts.critical,
+        high_count: counts.high,
+        medium_count: counts.medium,
+        low_count: counts.low,
+        scanned_at: now,
+      })
+      .select('*')
+      .single()
+
+    if (sessionError || !session) {
+      res.status(500).json({ error: sessionError?.message ?? 'Failed to create scan session' })
+      return
+    }
+
+    const archivePath = await writeArchiveBestEffort(teamId, req.userId!, session.id, {
+      team_id: teamId,
+      project_id: body.project_id ?? null,
+      workspace_id: workspaceId,
+      scan_scope: body.scan_scope,
+      scanned_target: scannedTarget,
+      scanned_at: now,
+      findings: processed,
+    })
+
+    if (archivePath) {
+      await supabaseAdmin
         .from('scan_sessions')
-        .insert({
-            team_id,
-            project_id: project_id ?? null,
-            uploaded_by: req.userId!,
-            scanned_file,
-            storage_path: storagePath,
-            total_count: processedFindings.length,
-            critical_count: counts.critical,
-            high_count: counts.high,
-            medium_count: counts.medium,
-            low_count: counts.low,
-        })
-        .select()
-        .single()
-
-    if (sessionErr) {
-        res.status(500).json({ error: sessionErr.message })
-        return
+        .update({ storage_path: archivePath })
+        .eq('id', session.id)
     }
 
-    if (processedFindings.length > 0) {
-        const rows = processedFindings.map((finding) => ({
-            session_id: session.id,
-            team_id,
-            uploaded_by: req.userId!,
-            module: finding.module,
-            rule_id: finding.rule_id ?? null,
-            title: finding.title,
-            description: finding.description ?? null,
-            severity: finding.severity,
-            original_severity: finding.original_severity,
-            risk_level: finding.risk_level,
-            risk_score: finding.risk_score,
-            file_path: finding.file_path ?? null,
-            line_number: finding.line_number ?? null,
-            column_number: finding.column_number ?? null,
-            code_snippet: finding.code_snippet ?? null,
-            function_name: finding.function_name ?? null,
-            complexity: finding.complexity ?? null,
-            nesting_depth: finding.nesting_depth ?? null,
-            function_loc: finding.function_loc ?? null,
-            secret_type: finding.secret_type ?? null,
-            taint_flow: finding.taint_flow ?? null,
-            data_type: finding.data_type ?? null,
-            storage_context: finding.storage_context ?? null,
-            status: 'open',
+    let upserted: Array<{ id: string; fingerprint: string }> = []
+
+    if (processed.length > 0) {
+      const fingerprints = processed.map((finding) => finding.fingerprint)
+      const { data: previousRows, error: previousRowsError } = await supabaseAdmin
+        .from('findings')
+        .select('fingerprint, status')
+        .eq('team_id', teamId)
+        .eq('uploaded_by', req.userId!)
+        .eq('workspace_id', workspaceId)
+        .in('fingerprint', fingerprints)
+
+      if (previousRowsError) {
+        res.status(500).json({ error: previousRowsError.message })
+        return
+      }
+
+      const previousStatus = new Map(
+        (previousRows ?? []).map((row) => [row.fingerprint, row.status as string]),
+      )
+
+      const rows = processed.map((finding) => ({
+        ...finding,
+        team_id: teamId,
+        project_id: body.project_id ?? null,
+        uploaded_by: req.userId!,
+        workspace_id: workspaceId,
+        last_session_id: session.id,
+        // Preserve a user's explicit in-progress state. A previously resolved
+        // finding that reappears is reopened automatically.
+        status: previousStatus.get(finding.fingerprint) === 'in_progress' ? 'in_progress' : 'open',
+        last_seen_at: now,
+        resolved_at: null,
+      }))
+
+      const { data, error } = await supabaseAdmin
+        .from('findings')
+        .upsert(rows, {
+          onConflict: 'team_id,uploaded_by,workspace_id,fingerprint',
+          ignoreDuplicates: false,
+        })
+        .select('id, fingerprint')
+
+      if (error) {
+        res.status(500).json({ error: error.message })
+        return
+      }
+      upserted = data ?? []
+
+      if (upserted.length > 0) {
+        const occurrences = upserted.map((finding) => ({
+          session_id: session.id,
+          finding_id: finding.id,
+          observed_at: now,
         }))
-
-        const { error: findErr } = await supabaseAdmin.from('findings').insert(rows)
-
-        if (findErr) {
-            res.status(500).json({ error: findErr.message })
-            return
+        const { error: occurrenceError } = await supabaseAdmin
+          .from('scan_finding_occurrences')
+          .upsert(occurrences, { onConflict: 'session_id,finding_id' })
+        if (occurrenceError) {
+          res.status(500).json({ error: occurrenceError.message })
+          return
         }
+      }
+    }
+
+    let resolvedCount = 0
+    const canResolveScope = body.scan_scope === 'project' || scannedTarget !== '.'
+    if (canResolveScope) {
+      let existingQuery = supabaseAdmin
+        .from('findings')
+        .select('id, fingerprint, file_path')
+        .eq('team_id', teamId)
+        .eq('uploaded_by', req.userId!)
+        .eq('workspace_id', workspaceId)
+        .neq('status', 'resolved')
+
+      // A full-project scan can resolve any finding missing from that workspace.
+      // A single-file scan can safely resolve only findings previously attached
+      // to the exact file that was rescanned. It never affects other files.
+      if (body.scan_scope === 'file') {
+        existingQuery = existingQuery.eq('file_path', scannedTarget)
+      }
+
+      const { data: existing, error: existingError } = await existingQuery
+      if (existingError) {
+        res.status(500).json({ error: existingError.message })
+        return
+      }
+
+      const current = new Set(processed.map((finding) => finding.fingerprint))
+      const staleIds = (existing ?? [])
+        .filter((finding) => !current.has(finding.fingerprint))
+        .map((finding) => finding.id)
+
+      if (staleIds.length > 0) {
+        const { error: resolveError } = await supabaseAdmin
+          .from('findings')
+          .update({ status: 'resolved', resolved_at: now })
+          .in('id', staleIds)
+        if (resolveError) {
+          res.status(500).json({ error: resolveError.message })
+          return
+        }
+        resolvedCount = staleIds.length
+      }
     }
 
     res.status(201).json({
-        data: {
-            session_id: session.id,
-            findings_count: processedFindings.length,
-        },
+      data: {
+        session_id: session.id,
+        findings_count: processed.length,
+        canonical_findings_updated: upserted.length,
+        resolved_count: resolvedCount,
+        archive_path: archivePath,
+      },
     })
+  } catch (error) {
+    next(error)
+  }
 })
 
-// GET /api/findings/me
+// GET /api/v1/findings/me
 router.get('/me', authMiddleware, async (req: AuthRequest, res) => {
-    let query = supabaseAdmin
-        .from('findings')
-        .select('*')
-        .eq('uploaded_by', req.userId!)
-        .order('created_at', { ascending: false })
+  const { data: memberships, error: membershipsError } = await supabaseAdmin
+    .from('team_members')
+    .select('team_id')
+    .eq('user_id', req.userId!)
 
-    if (req.query['severity']) query = query.eq('severity', req.query['severity'] as string)
-    if (req.query['module']) query = query.eq('module', req.query['module'] as string)
-    if (req.query['limit']) query = query.limit(parseInt(req.query['limit'] as string, 10))
+  if (membershipsError) {
+    res.status(500).json({ error: membershipsError.message })
+    return
+  }
+
+  const teamIds = (memberships ?? []).map((membership) => membership.team_id)
+  if (teamIds.length === 0) {
+    res.json({ data: [] })
+    return
+  }
+
+  let query = supabaseAdmin
+    .from('findings')
+    .select('*')
+    .eq('uploaded_by', req.userId!)
+    .in('team_id', teamIds)
+    .order('last_seen_at', { ascending: false })
+
+  if (req.query.security_severity) {
+    query = query.eq('security_severity', String(req.query.security_severity).toLowerCase())
+  }
+  if (req.query.component) {
+    query = query.eq('component', String(req.query.component).toUpperCase())
+  }
+  if (req.query.status) query = query.eq('status', String(req.query.status))
+  if (req.query.limit) query = query.limit(Number(req.query.limit))
+
+  const { data, error } = await query
+  if (error) {
+    res.status(500).json({ error: error.message })
+    return
+  }
+  res.json({ data: data ?? [] })
+})
+
+// GET /api/v1/findings/team/:teamId
+router.get('/team/:teamId', authMiddleware, requireTeamMember, async (req: AuthRequest, res) => {
+  const teamId = String(req.params.teamId)
+  let query = supabaseAdmin
+    .from('findings')
+    .select('*, profile:profiles!uploaded_by(*)')
+    .eq('team_id', teamId)
+    .order('last_seen_at', { ascending: false })
+
+  if (req.query.security_severity) {
+    query = query.eq('security_severity', String(req.query.security_severity).toLowerCase())
+  }
+  if (req.query.component) {
+    query = query.eq('component', String(req.query.component).toUpperCase())
+  }
+  if (req.query.status) query = query.eq('status', String(req.query.status))
+  if (req.query.uploaded_by) query = query.eq('uploaded_by', String(req.query.uploaded_by))
+  if (req.query.limit) query = query.limit(Number(req.query.limit))
+
+  const { data, error } = await query
+  if (error) {
+    res.status(500).json({ error: error.message })
+    return
+  }
+  res.json({ data: data ?? [] })
+})
+
+// GET /api/v1/findings/member/:userId?team_id=<uuid>
+router.get('/member/:userId', authMiddleware, async (req: AuthRequest, res, next) => {
+  try {
+    const targetUserId = String(req.params.userId)
+    const teamId = typeof req.query.team_id === 'string' ? req.query.team_id : ''
+
+    if (targetUserId !== req.userId && !teamId) {
+      res.status(400).json({ error: 'team_id is required when viewing another member' })
+      return
+    }
+
+    if (teamId) {
+      const requester = await getTeamMembership(teamId, req.userId!)
+      const target = await getTeamMembership(teamId, targetUserId)
+      if (!requester || !target) {
+        res.status(403).json({ error: 'Users do not share access to this team' })
+        return
+      }
+    }
+
+    let query = supabaseAdmin
+      .from('findings')
+      .select('*, profile:profiles!uploaded_by(*)')
+      .eq('uploaded_by', targetUserId)
+      .order('last_seen_at', { ascending: false })
+
+    if (teamId) query = query.eq('team_id', teamId)
 
     const { data, error } = await query
-
     if (error) {
-        res.status(500).json({ error: error.message })
-        return
+      res.status(500).json({ error: error.message })
+      return
     }
-
     res.json({ data: data ?? [] })
+  } catch (error) {
+    next(error)
+  }
 })
 
-// GET /api/findings/team/:teamId
-router.get('/team/:teamId', authMiddleware, async (req: AuthRequest, res) => {
-    const teamId = req.params.teamId as string
+// GET /api/v1/findings/:id
+router.get('/:id', authMiddleware, requireFindingAccess, async (req: AuthRequest, res) => {
+  const { data, error } = await supabaseAdmin
+    .from('findings')
+    .select('*, profile:profiles!uploaded_by(*)')
+    .eq('id', req.params.id)
+    .maybeSingle()
 
-    const { data: membership } = await supabaseAdmin
-        .from('team_members')
-        .select('role')
-        .eq('team_id', teamId)
-        .eq('user_id', req.userId!)
-        .single()
-
-    if (!membership) {
-        res.status(403).json({ error: 'Not a member of this team' })
-        return
-    }
-
-    let query = supabaseAdmin
-        .from('findings')
-        .select('*, profile:profiles!uploaded_by(*)')
-        .eq('team_id', teamId)
-        .order('created_at', { ascending: false })
-
-    if (req.query['severity']) query = query.eq('severity', req.query['severity'] as string)
-    if (req.query['module']) query = query.eq('module', req.query['module'] as string)
-    if (req.query['status']) query = query.eq('status', req.query['status'] as string)
-    if (req.query['uploaded_by']) query = query.eq('uploaded_by', req.query['uploaded_by'] as string)
-    if (req.query['limit']) query = query.limit(parseInt(req.query['limit'] as string, 10))
-
-    const { data, error } = await query
-
-    if (error) {
-        res.status(500).json({ error: error.message })
-        return
-    }
-
-    res.json({ data: data ?? [] })
-})
-
-// GET /api/findings/member/:userId
-router.get('/member/:userId', authMiddleware, async (req: AuthRequest, res) => {
-    const userId = req.params.userId as string
-
-    const { data, error } = await supabaseAdmin
-        .from('findings')
-        .select('*, profile:profiles!uploaded_by(*)')
-        .eq('uploaded_by', userId)
-        .order('created_at', { ascending: false })
-
-    if (error) {
-        res.status(500).json({ error: error.message })
-        return
-    }
-
-    res.json({ data: data ?? [] })
-})
-
-// GET /api/findings/:id
-router.get('/:id', authMiddleware, async (req: AuthRequest, res) => {
-    const id = req.params.id as string
-
-    const { data, error } = await supabaseAdmin
-        .from('findings')
-        .select('*, profile:profiles!uploaded_by(*)')
-        .eq('id', id)
-        .single()
-
-    if (error) {
-        res.status(404).json({ error: 'Finding not found' })
-        return
-    }
-
-    res.json({ data })
+  if (error) {
+    res.status(500).json({ error: error.message })
+    return
+  }
+  if (!data) {
+    res.status(404).json({ error: 'Finding not found' })
+    return
+  }
+  res.json({ data })
 })
 
 export default router

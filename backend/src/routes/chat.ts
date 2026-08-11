@@ -13,9 +13,9 @@ type TeamMemberAccess = {
 
 type FindingSummary = {
     id: string
-    module: string
+    component: string
     title: string
-    severity: string
+    security_severity: string
     status: string
     file_path: string | null
     line_number: number | null
@@ -54,7 +54,7 @@ async function ensureTeamMember(teamId: string, userId: string): Promise<TeamMem
 async function getFindingSummary(teamId: string, findingId: string): Promise<FindingSummary | null> {
     const { data, error } = await supabaseAdmin
         .from('findings')
-        .select('id, module, title, severity, status, file_path, line_number')
+        .select('id, component, title, security_severity, status, file_path, line_number')
         .eq('id', findingId)
         .eq('team_id', teamId)
         .maybeSingle()
@@ -70,7 +70,7 @@ async function getFindingsMap(teamId: string, findingIds: string[]) {
 
     const { data, error } = await supabaseAdmin
         .from('findings')
-        .select('id, module, title, severity, status, file_path, line_number')
+        .select('id, component, title, security_severity, status, file_path, line_number')
         .eq('team_id', teamId)
         .in('id', findingIds)
 
@@ -81,9 +81,9 @@ async function getFindingsMap(teamId: string, findingIds: string[]) {
             finding.id,
             {
                 id: finding.id,
-                module: finding.module,
+                component: finding.component,
                 title: finding.title,
-                severity: finding.severity,
+                security_severity: finding.security_severity,
                 status: finding.status,
                 file_path: finding.file_path ?? null,
                 line_number: finding.line_number ?? null,

@@ -26,49 +26,53 @@ function assertRulesArray(value: unknown) {
     }
 }
 
+function assertSecurityMetadata(rule: Record<string, unknown>, label: string) {
+    assertString(rule.securitySeverity, `${label}.securitySeverity`)
+    const confidence = rule.defaultConfidence ?? rule.confidence
+    assertString(confidence, `${label}.defaultConfidence/confidence`)
+    assertString(rule.category, `${label}.category`)
+    assertString(rule.description, `${label}.description`)
+    assertString(rule.remediation, `${label}.remediation`)
+}
+
 function validateHsdRules(rules: unknown[]) {
     for (const [index, rule] of rules.entries()) {
         if (!isPlainObject(rule)) throw new Error(`HSD rule ${index + 1} must be an object`)
-        assertString(rule.id, `HSD rule ${index + 1}.id`)
-        assertString(rule.name, `HSD rule ${index + 1}.name`)
-        assertString(rule.pattern, `HSD rule ${index + 1}.pattern`)
-        assertString(rule.severity, `HSD rule ${index + 1}.severity`)
-        assertString(rule.description, `HSD rule ${index + 1}.description`)
+        const label = `HSD rule ${index + 1}`
+        assertString(rule.id, `${label}.id`)
+        assertString(rule.name, `${label}.name`)
+        // Most HSD rules are provider/structural regex rules. Context-only rules may
+        // intentionally omit a provider but still require a pattern.
+        assertString(rule.pattern, `${label}.pattern`)
+        assertSecurityMetadata(rule, label)
     }
 }
 
 function validateNetRules(rules: unknown[]) {
     for (const [index, rule] of rules.entries()) {
         if (!isPlainObject(rule)) throw new Error(`NET rule ${index + 1} must be an object`)
-        assertString(rule.id, `NET rule ${index + 1}.id`)
-        assertString(rule.name, `NET rule ${index + 1}.name`)
-        assertString(rule.checkKey, `NET rule ${index + 1}.checkKey`)
-        assertString(rule.severity, `NET rule ${index + 1}.severity`)
-        assertString(rule.messageTemplate, `NET rule ${index + 1}.messageTemplate`)
-        assertString(rule.description, `NET rule ${index + 1}.description`)
+        const label = `NET rule ${index + 1}`
+        assertString(rule.id, `${label}.id`)
+        assertString(rule.name, `${label}.name`)
+        assertString(rule.checkKey, `${label}.checkKey`)
+        assertSecurityMetadata(rule, label)
     }
 }
 
 function validateIdsRules(rules: unknown[]) {
     for (const [index, rule] of rules.entries()) {
         if (!isPlainObject(rule)) throw new Error(`IDS rule ${index + 1} must be an object`)
-        assertString(rule.id, `IDS rule ${index + 1}.id`)
-        assertString(rule.name, `IDS rule ${index + 1}.name`)
-        assertString(rule.checkKey, `IDS rule ${index + 1}.checkKey`)
-        assertString(rule.severity, `IDS rule ${index + 1}.severity`)
-        assertString(rule.category, `IDS rule ${index + 1}.category`)
-        assertString(rule.riskLevel, `IDS rule ${index + 1}.riskLevel`)
-        assertString(rule.description, `IDS rule ${index + 1}.description`)
-        assertString(rule.remediation, `IDS rule ${index + 1}.remediation`)
+        const label = `IDS rule ${index + 1}`
+        assertString(rule.id, `${label}.id`)
+        assertString(rule.name, `${label}.name`)
+        assertString(rule.checkKey, `${label}.checkKey`)
+        assertSecurityMetadata(rule, label)
 
-        if (!Array.isArray(rule.patterns)) {
-            throw new Error(`IDS rule ${index + 1}.patterns must be an array`)
-        }
-        if (!Array.isArray(rule.dataTypes)) {
-            throw new Error(`IDS rule ${index + 1}.dataTypes must be an array`)
-        }
-        if (!Array.isArray(rule.requiresImport)) {
-            throw new Error(`IDS rule ${index + 1}.requiresImport must be an array`)
+        const listFields = ['targetFunctions', 'requiresImport']
+        for (const field of listFields) {
+            if (rule[field] != null && !Array.isArray(rule[field])) {
+                throw new Error(`${label}.${field} must be an array when provided`)
+            }
         }
     }
 }
@@ -76,14 +80,13 @@ function validateIdsRules(rules: unknown[]) {
 function validateIivRules(rules: unknown[]) {
     for (const [index, rule] of rules.entries()) {
         if (!isPlainObject(rule)) throw new Error(`IIV rule ${index + 1} must be an object`)
-        assertString(rule.id, `IIV rule ${index + 1}.id`)
-        assertString(rule.name, `IIV rule ${index + 1}.name`)
-        assertString(rule.checkKey, `IIV rule ${index + 1}.checkKey`)
-        assertString(rule.severity, `IIV rule ${index + 1}.severity`)
-        assertString(rule.description, `IIV rule ${index + 1}.description`)
-        assertString(rule.remediation, `IIV rule ${index + 1}.remediation`)
-        if (!Array.isArray(rule.targetFunctions)) {
-            throw new Error(`IIV rule ${index + 1}.targetFunctions must be an array`)
+        const label = `IIV rule ${index + 1}`
+        assertString(rule.id, `${label}.id`)
+        assertString(rule.name, `${label}.name`)
+        assertString(rule.checkKey, `${label}.checkKey`)
+        assertSecurityMetadata(rule, label)
+        if (rule.targetFunctions != null && !Array.isArray(rule.targetFunctions)) {
+            throw new Error(`${label}.targetFunctions must be an array when provided`)
         }
     }
 }

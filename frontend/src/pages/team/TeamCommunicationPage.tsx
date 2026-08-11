@@ -467,9 +467,9 @@ export default function TeamCommunicationPage() {
                                                 </p>
                                             </div>
 
-                                            {thread.finding?.severity && (
-                                                <span className={severityBadge(thread.finding.severity)}>
-                                                    {thread.finding.severity}
+                                            {thread.finding?.security_severity && (
+                                                <span className={severityBadge(thread.finding.security_severity)}>
+                                                    {thread.finding.security_severity}
                                                 </span>
                                             )}
                                         </div>
@@ -532,9 +532,9 @@ export default function TeamCommunicationPage() {
                                     </p>
                                 </div>
 
-                                {selectedFinding?.severity && (
-                                    <span className={severityBadge(selectedFinding.severity)}>
-                                        {selectedFinding.severity}
+                                {selectedFinding?.security_severity && (
+                                    <span className={severityBadge(selectedFinding.security_severity)}>
+                                        {selectedFinding.security_severity}
                                     </span>
                                 )}
                             </div>
@@ -745,16 +745,16 @@ export default function TeamCommunicationPage() {
                                 </p>
 
                                 <div className="flex flex-wrap gap-2">
-                                    {selectedFinding?.severity && (
-                                        <span className={severityBadge(selectedFinding.severity)}>
-                                            {selectedFinding.severity}
+                                    {selectedFinding?.security_severity && (
+                                        <span className={severityBadge(selectedFinding.security_severity)}>
+                                            {selectedFinding.security_severity}
                                         </span>
                                     )}
                                     {selectedFinding?.status && (
                                         <span className="badge-low">{selectedFinding.status}</span>
                                     )}
-                                    {selectedFinding?.module && (
-                                        <span className="badge-low">{selectedFinding.module}</span>
+                                    {selectedFinding?.component && (
+                                        <span className="badge-low">{selectedFinding.component}</span>
                                     )}
                                 </div>
 

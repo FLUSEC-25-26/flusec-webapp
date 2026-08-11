@@ -1,75 +1,101 @@
 import { Router } from 'express'
 import { supabaseAdmin } from '../services/supabaseAdmin'
 import { authMiddleware, type AuthRequest } from '../middleware/authMiddleware'
+import { getTeamMembership } from '../middleware/accessControl'
+import { summarizeFindings } from '../services/findingStats'
 
 const router = Router()
 
-// GET /api/members/:userId/stats
-router.get('/:userId/stats', authMiddleware, async (req: AuthRequest, res) => {
-    const { userId } = req.params
+async function authorizeMemberView(teamId: string, requesterId: string, targetUserId: string) {
+  const [requester, target] = await Promise.all([
+    getTeamMembership(teamId, requesterId),
+    getTeamMembership(teamId, targetUserId),
+  ])
+  return Boolean(requester && target)
+}
 
-    const { data: findings, error } = await supabaseAdmin
-        .from('findings')
-        .select('severity, module, created_at')
-        .eq('uploaded_by', userId)
+router.get('/:userId/stats', authMiddleware, async (req: AuthRequest, res, next) => {
+  try {
+    const targetUserId = String(req.params.userId)
+    const teamId = typeof req.query.team_id === 'string' ? req.query.team_id : ''
 
-    if (error) { res.status(500).json({ error: error.message }); return }
+    if (!teamId) {
+      res.status(400).json({ error: 'team_id is required' })
+      return
+    }
+    if (!(await authorizeMemberView(teamId, req.userId!, targetUserId))) {
+      res.status(403).json({ error: 'You do not have access to this member' })
+      return
+    }
 
-    const total = findings?.length ?? 0
-    const critical = findings?.filter(f => f.severity === 'critical').length ?? 0
-    const high = findings?.filter(f => f.severity === 'high').length ?? 0
-    const medium = findings?.filter(f => f.severity === 'medium').length ?? 0
-    const low = findings?.filter(f => f.severity === 'low').length ?? 0
+    const { data, error } = await supabaseAdmin
+      .from('findings')
+      .select('component, security_severity, last_seen_at, status')
+      .eq('team_id', teamId)
+      .eq('uploaded_by', targetUserId)
 
-    const by_module: Record<string, number> = {}
-    findings?.forEach(f => { by_module[f.module] = (by_module[f.module] ?? 0) + 1 })
+    if (error) {
+      res.status(500).json({ error: error.message })
+      return
+    }
 
-    const risk_score = Math.min(100, critical * 25 + high * 10 + medium * 3 + low * 1)
-
-    const sorted = [...(findings ?? [])].sort(
-        (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-    )
-
-    res.json({
-        data: {
-            total, critical, high, medium, low,
-            by_module,
-            risk_score,
-            last_scanned_at: sorted[0]?.created_at ?? null,
-        }
-    })
+    res.json({ data: summarizeFindings(data ?? []) })
+  } catch (error) {
+    next(error)
+  }
 })
 
-// GET /api/members/:userId/timeline — scan count per day (last 30 days)
-router.get('/:userId/timeline', authMiddleware, async (req: AuthRequest, res) => {
-    const { userId } = req.params
+router.get('/:userId/timeline', authMiddleware, async (req: AuthRequest, res, next) => {
+  try {
+    const targetUserId = String(req.params.userId)
+    const teamId = typeof req.query.team_id === 'string' ? req.query.team_id : ''
+
+    if (!teamId) {
+      res.status(400).json({ error: 'team_id is required' })
+      return
+    }
+    if (!(await authorizeMemberView(teamId, req.userId!, targetUserId))) {
+      res.status(403).json({ error: 'You do not have access to this member' })
+      return
+    }
 
     const thirtyDaysAgo = new Date()
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
 
     const { data: sessions, error } = await supabaseAdmin
-        .from('scan_sessions')
-        .select('scanned_at, total_count, critical_count, high_count, medium_count, low_count')
-        .eq('uploaded_by', userId)
-        .gte('scanned_at', thirtyDaysAgo.toISOString())
-        .order('scanned_at', { ascending: true })
+      .from('scan_sessions')
+      .select('scanned_at, total_count, critical_count, high_count, medium_count, low_count')
+      .eq('team_id', teamId)
+      .eq('uploaded_by', targetUserId)
+      .gte('scanned_at', thirtyDaysAgo.toISOString())
+      .order('scanned_at', { ascending: true })
 
-    if (error) { res.status(500).json({ error: error.message }); return }
+    if (error) {
+      res.status(500).json({ error: error.message })
+      return
+    }
 
-    // Group by date
-    const byDate: Record<string, { total: number; critical: number; high: number; medium: number; low: number }> = {}
-    sessions?.forEach(s => {
-        const date = s.scanned_at.split('T')[0]
-        if (!byDate[date]) byDate[date] = { total: 0, critical: 0, high: 0, medium: 0, low: 0 }
-        byDate[date].total += s.total_count ?? 0
-        byDate[date].critical += s.critical_count ?? 0
-        byDate[date].high += s.high_count ?? 0
-        byDate[date].medium += s.medium_count ?? 0
-        byDate[date].low += s.low_count ?? 0
+    const byDate: Record<
+      string,
+      { total: number; critical: number; high: number; medium: number; low: number }
+    > = {}
+
+    for (const session of sessions ?? []) {
+      const date = String(session.scanned_at).split('T')[0]
+      byDate[date] ??= { total: 0, critical: 0, high: 0, medium: 0, low: 0 }
+      byDate[date].total += session.total_count ?? 0
+      byDate[date].critical += session.critical_count ?? 0
+      byDate[date].high += session.high_count ?? 0
+      byDate[date].medium += session.medium_count ?? 0
+      byDate[date].low += session.low_count ?? 0
+    }
+
+    res.json({
+      data: Object.entries(byDate).map(([date, counts]) => ({ date, ...counts })),
     })
-
-    const timeline = Object.entries(byDate).map(([date, counts]) => ({ date, ...counts }))
-    res.json({ data: timeline })
+  } catch (error) {
+    next(error)
+  }
 })
 
 export default router

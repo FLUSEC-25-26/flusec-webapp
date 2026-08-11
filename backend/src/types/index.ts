@@ -1,72 +1,104 @@
-// Shared backend types
-
-export type SeverityLevel = 'critical' | 'high' | 'medium' | 'low'
-export type RiskLevel = 'critical' | 'high' | 'medium' | 'low'
-export type AdvisorModule = 'HSD' | 'SNC' | 'SDS' | 'IVS'
+export type SecuritySeverity = 'critical' | 'high' | 'medium' | 'low'
+export type DetectionConfidence = 'high' | 'medium' | 'low'
+export type DiagnosticSeverity = 'warning'
+export type FlusecComponent = 'HSD' | 'NET' | 'IDS' | 'IIV'
 export type FindingStatus = 'open' | 'in_progress' | 'resolved'
+export type ScanScope = 'file' | 'project'
 
 export interface TaintFlowStep {
-    type?: string
-    line?: number | null
-    column?: number | null
-    description?: string | null
+  type?: string
+  line?: number | null
+  column?: number | null
+  description?: string | null
 }
 
+/**
+ * Finding payload accepted by the versioned API. The extension sends the
+ * canonical snake_case fields; camelCase aliases remain only for analyzer/web
+ * migration safety during this release.
+ */
 export interface RawFinding {
-    module?: AdvisorModule
-    component?: string
+  component?: string
+  fingerprint?: string
+  ruleId?: string
+  rule_id?: string
 
-    rule_id?: string
-    ruleId?: string
+  title?: string
+  message?: string
+  description?: string
 
-    title?: string
-    message?: string
-    description?: string
+  severity?: string
+  diagnosticSeverity?: string
+  diagnostic_severity?: string
+  securitySeverity?: string
+  security_severity?: string
+  confidence?: string
+  category?: string
+  cwe?: string
+  remediation?: string
+  evidence?: Record<string, unknown> | null
 
-    severity?: string
-    original_severity?: string | null
-    originalSeverity?: string | null
+  file?: string
+  filePath?: string
+  file_path?: string
+  line?: number
+  lineNumber?: number
+  line_number?: number
+  column?: number
+  columnNumber?: number
+  column_number?: number
+  codeSnippet?: string
+  code_snippet?: string
+  snippet?: string
 
-    file_path?: string
-    filePath?: string
-    file?: string
+  functionName?: string | null
+  function_name?: string | null
+  complexity?: number | null
+  nestingDepth?: number | null
+  nesting_depth?: number | null
+  functionLoc?: number | null
+  function_loc?: number | null
+  maintainabilityScore?: number | null
+  maintainability_score?: number | null
+  maintainabilityLevel?: string | null
+  maintainability_level?: string | null
 
-    line_number?: number
-    lineNumber?: number
-    line?: number
+  secretType?: string | null
+  secret_type?: string | null
+  taintFlow?: TaintFlowStep[] | null
+  taint_flow?: TaintFlowStep[] | null
 
-    column_number?: number
-    columnNumber?: number
-    column?: number
+  dataType?: string | null
+  data_type?: string | null
+  storageContext?: string | null
+  storage_context?: string | null
+}
 
-    code_snippet?: string
-    codeSnippet?: string
-    snippet?: string
-
-    function_name?: string | null
-    functionName?: string | null
-
-    complexity?: number | null
-
-    nesting_depth?: number | null
-    nestingDepth?: number | null
-
-    function_loc?: number | null
-    functionLoc?: number | null
-
-    secret_type?: string | null
-    secretType?: string | null
-
-    taint_flow?: TaintFlowStep[] | null
-    taintFlow?: TaintFlowStep[] | null
-
-    risk_level?: string | null
-    riskLevel?: string | null
-    risk_score?: number | null
-
-    data_type?: string | null
-    dataType?: string | null
-
-    storage_context?: string | null
-    storageContext?: string | null
+export interface NormalizedFinding {
+  component: FlusecComponent
+  fingerprint: string
+  rule_id: string | null
+  title: string
+  description: string | null
+  diagnostic_severity: DiagnosticSeverity
+  security_severity: SecuritySeverity
+  confidence: DetectionConfidence
+  category: string | null
+  cwe: string | null
+  remediation: string | null
+  evidence: Record<string, unknown>
+  file_path: string | null
+  line_number: number | null
+  column_number: number | null
+  code_snippet: string | null
+  function_name: string | null
+  complexity: number | null
+  nesting_depth: number | null
+  function_loc: number | null
+  maintainability_score: number | null
+  maintainability_level: string | null
+  secret_type: string | null
+  taint_flow: TaintFlowStep[] | null
+  data_type: string | null
+  storage_context: string | null
 }

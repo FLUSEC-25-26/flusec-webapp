@@ -4,74 +4,92 @@ import { authMiddleware, type AuthRequest } from '../middleware/authMiddleware'
 
 const router = Router()
 
-// GET /api/auth/me — returns profile + team membership
-// Auto-creates profile if the Supabase trigger missed it
 router.get('/me', authMiddleware, async (req: AuthRequest, res) => {
-    const userId = req.userId!
+  const userId = req.userId!
 
-    // Fetch profile — auto-create if trigger didn't fire
-    let { data: profile } = await supabaseAdmin
-        .from('profiles')
-        .select('*')
-        .eq('id', userId)
-        .maybeSingle()
+  let { data: profile, error: profileError } = await supabaseAdmin
+    .from('profiles')
+    .select('*')
+    .eq('id', userId)
+    .maybeSingle()
 
-    if (!profile) {
-        // Profile missing — get user metadata from auth and create it
-        const { data: { user: authUser } } = await supabaseAdmin.auth.admin.getUserById(userId)
-        const fullName = authUser?.user_metadata?.full_name
-            ?? authUser?.email?.split('@')[0]
-            ?? 'User'
+  if (profileError) {
+    res.status(500).json({ error: profileError.message })
+    return
+  }
 
-        const { data: newProfile } = await supabaseAdmin
-            .from('profiles')
-            .upsert({ id: userId, full_name: fullName })
-            .select()
-            .single()
+  if (!profile) {
+    const {
+      data: { user: authUser },
+      error: authUserError,
+    } = await supabaseAdmin.auth.admin.getUserById(userId)
 
-        profile = newProfile
+    if (authUserError) {
+      res.status(500).json({ error: authUserError.message })
+      return
     }
 
-    if (!profile) {
-        res.status(500).json({ error: 'Could not create or find profile' }); return
+    const fullName =
+      authUser?.user_metadata?.full_name ?? authUser?.email?.split('@')[0] ?? 'User'
+
+    const { data: created, error: createError } = await supabaseAdmin
+      .from('profiles')
+      .upsert({ id: userId, full_name: fullName })
+      .select('*')
+      .single()
+
+    if (createError) {
+      res.status(500).json({ error: createError.message })
+      return
     }
+    profile = created
+  }
 
-    // Fetch team membership (service role bypasses RLS)
-    const { data: membership } = await supabaseAdmin
-        .from('team_members')
-        .select('team_id, role')
-        .eq('user_id', userId)
-        .maybeSingle()
+  const { data: memberships, error: membershipsError } = await supabaseAdmin
+    .from('team_members')
+    .select('role, joined_at, teams(*)')
+    .eq('user_id', userId)
+    .order('joined_at', { ascending: true })
 
-    let team = null
-    if (membership?.team_id) {
-        const { data: teamData } = await supabaseAdmin
-            .from('teams')
-            .select('*')
-            .eq('id', membership.team_id)
-            .maybeSingle()
-        team = teamData ?? null
-    }
+  if (membershipsError) {
+    res.status(500).json({ error: membershipsError.message })
+    return
+  }
 
-    res.json({
-        data: {
-            profile,
-            team,
-            role: membership?.role ?? null,
-        }
-    })
+  const teams = (memberships ?? [])
+    .filter((membership: any) => membership.teams)
+    .map((membership: any) => ({
+      ...membership.teams,
+      myRole: membership.role,
+      joined_at: membership.joined_at,
+    }))
+
+  res.json({
+    data: {
+      profile,
+      teams,
+    },
+  })
 })
 
-// POST /api/auth/profile — upsert profile info
 router.post('/profile', authMiddleware, async (req: AuthRequest, res) => {
-    const { full_name } = req.body as { full_name: string }
-    const { data, error } = await supabaseAdmin
-        .from('profiles')
-        .upsert({ id: req.userId!, full_name })
-        .select()
-        .single()
-    if (error) { res.status(500).json({ error: error.message }); return }
-    res.status(201).json({ data })
+  const fullName = typeof req.body?.full_name === 'string' ? req.body.full_name.trim() : ''
+  if (!fullName) {
+    res.status(400).json({ error: 'full_name is required' })
+    return
+  }
+
+  const { data, error } = await supabaseAdmin
+    .from('profiles')
+    .upsert({ id: req.userId!, full_name: fullName })
+    .select('*')
+    .single()
+
+  if (error) {
+    res.status(500).json({ error: error.message })
+    return
+  }
+  res.json({ data })
 })
 
 export default router

@@ -96,7 +96,7 @@
   }
 
   .badge-low {
-    @apply badge bg-green-500/15 text-green-400 border border-green-500/30;
+    @apply badge bg-blue-500/15 text-blue-400 border border-blue-500/30;
   }
 
   .badge-info {
@@ -105,9 +105,9 @@
 
   /* === Module chips === */
   .chip-hsd { @apply badge bg-purple-500/15 text-purple-400 border border-purple-500/30; }
-  .chip-snc { @apply badge bg-cyan-500/15 text-cyan-400 border border-cyan-500/30; }
-  .chip-sds { @apply badge bg-teal-500/15 text-teal-400 border border-teal-500/30; }
-  .chip-ivs { @apply badge bg-pink-500/15 text-pink-400 border border-pink-500/30; }
+  .chip-net { @apply badge bg-cyan-500/15 text-cyan-400 border border-cyan-500/30; }
+  .chip-ids { @apply badge bg-teal-500/15 text-teal-400 border border-teal-500/30; }
+  .chip-iiv { @apply badge bg-pink-500/15 text-pink-400 border border-pink-500/30; }
 
   /* === Page wrapper === */
   .page-container {
