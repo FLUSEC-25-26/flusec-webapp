@@ -1,5 +1,16 @@
 export type PolicyComponentCode = 'HSD' | 'NET' | 'IDS' | 'IIV'
 export type PolicyVersionStatus = 'draft' | 'published' | 'archived'
+export type SecuritySeverity = 'critical' | 'high' | 'medium' | 'low'
+export type DetectionConfidence = 'high' | 'medium' | 'low'
+export type PolicyCategory = 'vulnerability' | 'secure_coding'
+
+export interface HsdHeuristics {
+    minLength: number
+    minContextLength: number
+    minEntropy: number
+    placeholderMarkers: string[]
+    sensitiveKeywords: string[]
+}
 
 export interface ActivePolicyRow {
     team_id: string
